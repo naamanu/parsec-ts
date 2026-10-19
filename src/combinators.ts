@@ -248,20 +248,21 @@ export const count = <T, I = string>(n: number, p: Parser<T, I>): Parser<readonl
 };
 
 /** The object produced by `struct(shape)`. */
-export type StructFields<S extends Readonly<Record<string, Parser<any, any>>>> = {
+export type StructFields<S extends Readonly<Record<PropertyKey, Parser<any, any>>>> = {
   readonly [K in keyof S]: ParserValue<S[K]>;
 };
 
 /**
- * Run each field's parser in key order, collecting the values into an object
- * with the same keys: `struct({ name: ident, _: symbol("="), value: expr })`.
+ * Run each own field's parser in object key order: integer-index keys first,
+ * then other strings, then symbols. Includes non-enumerable fields.
+ * Collect values with the same keys: `struct({ name: ident, _: symbol("="), value: expr })`.
  */
-export const struct = <S extends Readonly<Record<string, Parser<any, any>>>>(
+export const struct = <S extends Readonly<Record<PropertyKey, Parser<any, any>>>>(
   shape: S,
 ): Parser<StructFields<S>, ParserInput<S[keyof S]>> => {
-  const fields = Object.entries(shape);
+  const fields = Reflect.ownKeys(shape).map((key) => [key, shape[key]!] as const);
   return (input, start) => {
-    const entries: [string, unknown][] = [];
+    const entries: [PropertyKey, unknown][] = [];
     let pos = start;
     let fail: Failure | undefined;
     for (const [key, p] of fields) {

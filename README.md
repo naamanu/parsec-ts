@@ -191,7 +191,7 @@ For tokens, `found` defaults to the JSON of the token, and `column` to its index
 | `between(open, p, close)` | keep the middle value |
 | `alt(...ps)` | ordered choice with backtracking |
 | `cut(p)` / `attempt(p)` | make failures in `p` fatal / recoverable again |
-| `struct({ key: p, ... })` | run in key order, returning a typed object |
+| `struct({ key: p, ... })` | parse all own fields, including symbols and non-enumerable fields, in object key order; return a typed object |
 | `optional(p, fallback?)` | `p`, or `fallback` (default `null`) |
 | `many(p)` / `many1(p)` | zero / one or more |
 | `count(n, p)` | exactly `n` |

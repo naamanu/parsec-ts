@@ -38,6 +38,23 @@ describe("primitives", () => {
     assert.deepEqual(parse(p, "123"), ok(["1", "2", "3"]));
   });
 
+  test("Unicode regexes only match at the requested UTF-16 offset", () => {
+    for (const flags of ["u", "v"]) {
+      const p = regex(new RegExp(".", flags), "code point");
+      assert.deepEqual(p("😀x", 0), { ok: true, value: "😀", pos: 2 });
+      assert.deepEqual(p("😀x", 1), { ok: false, failure: { pos: 1, expected: ["code point"] } });
+      assert.deepEqual(p("😀x", 2), { ok: true, value: "x", pos: 3 });
+      assert.deepEqual(p("😀", 1), { ok: false, failure: { pos: 1, expected: ["code point"] } });
+
+      // A literal can consume one half of a surrogate pair before a regex runs.
+      const splitPair = seq(str("\ud83d"), p);
+      assert.equal(failed(parse(splitPair, "😀")).pos, 1);
+      assert.deepEqual(parse(alt(splitPair, str("😀")), "😀"), ok("😀"));
+      assert.deepEqual(parse(p, "😀"), ok("😀"));
+    }
+    assert.deepEqual(parse(seq(str("\ud83d"), regex(/./)), "😀"), ok(["\ud83d", "\ude00"]));
+  });
+
   test("regex scales to large inputs", () => {
     const r = parse(many(regex(/a/)), "a".repeat(1_000_000));
     assert.ok(r.ok && r.value.length === 1_000_000);
@@ -120,6 +137,27 @@ describe("combinators", () => {
       assert.equal(value, wrong);
     }
     assert.deepEqual(failed(parse(assignment, "x 42")).expected, ['"="']);
+  });
+
+  test("struct parses own string and symbol fields in object key order", () => {
+    const first = Symbol("field");
+    const second = Symbol("field");
+    const p = struct({ [first]: str("d"), name: str("c"), 2: str("b"), 1: str("a"), [second]: map(digit, Number) });
+    const r = parse(p, "abcd7");
+    assert.deepEqual(r, ok({ 1: "a", 2: "b", name: "c", [first]: "d", [second]: 7 }));
+    if (r.ok) assert.deepEqual(Reflect.ownKeys(r.value), ["1", "2", "name", first, second]);
+    assert.deepEqual(failed(parse(p, "abcx7")).expected, ['"d"']);
+
+    const symbolOnly = struct({ [first]: str("a") });
+    assert.deepEqual(parse(symbolOnly, "a"), ok({ [first]: "a" }));
+    assert.deepEqual(failed(parse(symbolOnly, "")).expected, ['"a"']);
+  });
+
+  test("struct includes non-enumerable own fields and skips inherited fields", () => {
+    const shape = { own: str("a") };
+    Object.defineProperty(shape, "own", { enumerable: false });
+    Object.setPrototypeOf(shape, { inherited: str("b") });
+    assert.deepEqual(parse(struct(shape), "a"), ok({ own: "a" }));
   });
 
   test("many stops on zero-width success", () => {
