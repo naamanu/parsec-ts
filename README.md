@@ -25,7 +25,7 @@ if (result.ok) console.log(result.value); // 14
 else console.error(formatFailure(result.error));
 
 parse(expr, "1 x");
-// Parse error at line 1, column 3: expected "*", "/", "+", "-" or end of input
+// Parse error at line 1, column 3: unexpected "x", expected "*", "/", "+", "-" or end of input
 ```
 
 See [`examples/`](examples) for a calculator and a complete JSON parser.
@@ -34,7 +34,7 @@ See [`examples/`](examples) for a calculator and a complete JSON parser.
 
 A `Parser<T>` is a plain function `(input: string, pos: number) => Result<T>`. You can write your own parsers directly, and they compose with the built-in ones.
 
-`parse(p, input)` runs `p` against the whole input and returns `{ ok: true, value }` or `{ ok: false, error }`. The `error` has `expected`, `pos`, `line` and `column`. `formatFailure` turns it into a readable message.
+`parse(p, input)` runs `p` against the whole input and returns `{ ok: true, value }` or `{ ok: false, error }`. The `error` has `expected`, `found` (the character at the failure, or `"end of input"`), `pos`, `line` and `column`. `formatFailure` turns it into a readable message.
 
 ### Error messages
 

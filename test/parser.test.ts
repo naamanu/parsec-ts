@@ -145,9 +145,15 @@ describe("errors", () => {
     assert.deepEqual(failed(parse(label(seq(str("a"), str("b")), "ab"), "ac")).expected, ['"b"']);
   });
 
+  test("failures report what was found", () => {
+    assert.equal(failed(parse(str("a"), "😀")).found, '"😀"');
+    assert.equal(failed(parse(str("a"), "")).found, "end of input");
+    assert.equal(formatFailure(failed(parse(alt(), "z"))), "Parse error at line 1, column 1: unexpected \"z\"");
+  });
+
   test("formatFailure reports line, column and alternatives", () => {
     const e = failed(parse(seq(str("a\n"), alt(str("b"), str("c"), str("d"))), "a\nx"));
-    assert.equal(formatFailure(e), 'Parse error at line 2, column 1: expected "b", "c" or "d"');
+    assert.equal(formatFailure(e), 'Parse error at line 2, column 1: unexpected "x", expected "b", "c" or "d"');
   });
 });
 
@@ -163,9 +169,9 @@ describe("calculator example", () => {
   test("errors list every acceptable token", () => {
     assert.equal(
       formatFailure(failed(calc("1 x"))),
-      'Parse error at line 1, column 3: expected "^", "*", "/", "+", "-" or end of input',
+      'Parse error at line 1, column 3: unexpected "x", expected "^", "*", "/", "+", "-" or end of input',
     );
-    assert.equal(formatFailure(failed(calc("1 +"))), 'Parse error at line 1, column 4: expected number or "("');
+    assert.equal(formatFailure(failed(calc("1 +"))), 'Parse error at line 1, column 4: unexpected end of input, expected number or "("');
   });
 });
 
