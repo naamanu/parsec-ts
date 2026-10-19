@@ -17,6 +17,8 @@ export type ParseFailure = {
    * says otherwise.
    */
   readonly column: number;
+  /** Names from enclosing `context` combinators, innermost first. */
+  readonly context: readonly string[];
 };
 
 /** Outcome of `parse`: the value, or a located failure. */
@@ -55,16 +57,20 @@ const defaultLocate = (input: Input, pos: number): { line: number; column: numbe
 export const parse = <T, I extends Input>(p: Parser<T, I>, input: I, options: ParseOptions<I> = {}): ParseResult<T> => {
   const r = left(p, eof)(input, 0);
   if (r.ok) return { ok: true, value: r.value };
-  const { pos, expected } = r.failure;
+  const { pos, expected, context = [] } = r.failure;
   const found = pos >= input.length ? "end of input" : (options.describe ?? defaultDescribe)(input, pos);
   const { line, column } = (options.locate ?? defaultLocate)(input, pos);
-  return { ok: false, error: { expected, found, pos, line, column } };
+  return { ok: false, error: { expected, found, pos, line, column, context } };
 };
 
 const orList = (xs: readonly string[]): string =>
   xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`;
 
-/** Render a failure as `Parse error at line L, column C: unexpected X, expected A, B or C`. */
+/**
+ * Render a failure as one line:
+ * `Parse error at line L, column C: unexpected X, expected A, B or C (in inner, in outer)`.
+ */
 export const formatFailure = (e: ParseFailure): string =>
   `Parse error at line ${e.line}, column ${e.column}: unexpected ${e.found}` +
-  (e.expected.length ? `, expected ${orList(e.expected)}` : "");
+  (e.expected.length ? `, expected ${orList(e.expected)}` : "") +
+  (e.context.length ? ` (${e.context.map((c) => `in ${c}`).join(", ")})` : "");

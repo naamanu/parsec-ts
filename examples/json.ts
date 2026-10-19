@@ -1,5 +1,5 @@
 import {
-  alt, between, cut, label, lazy, left, lexeme, many, map, parse, regex, right, satisfy, sepBy, seq, str, symbol,
+  alt, between, context, cut, label, lazy, left, lexeme, many, map, parse, regex, right, satisfy, sepBy, seq, str, symbol,
   type Parser, type ParseResult,
 } from "../src/index.ts";
 
@@ -38,12 +38,18 @@ const value: Parser<Json> = lazy(() =>
 );
 
 // After "[" or "{" nothing else can match, so `cut` commits: a failure inside
-// is reported as-is, with no backtracking into other alternatives.
-const array: Parser<readonly Json[]> = between(sym("["), cut(sepBy(value, sym(","))), cut(sym("]")));
+// is reported as-is, with no backtracking into other alternatives. `context`
+// adds where the failure happened: `... (in object key, in object, in array)`.
+const array: Parser<readonly Json[]> = context(
+  "array",
+  between(sym("["), cut(sepBy(value, sym(","))), cut(sym("]"))),
+);
 
-const object: Parser<{ readonly [key: string]: Json }> = map(
-  between(sym("{"), cut(sepBy(seq(left(string, sym(":")), value), sym(","))), cut(sym("}"))),
-  (pairs) => Object.fromEntries(pairs),
+const key = context("object key", left(string, sym(":")));
+
+const object: Parser<{ readonly [key: string]: Json }> = context(
+  "object",
+  map(between(sym("{"), cut(sepBy(seq(key, value), sym(","))), cut(sym("}"))), (pairs) => Object.fromEntries(pairs)),
 );
 
 export const parseJson = (input: string): ParseResult<Json> => parse(right(ws, value), input);

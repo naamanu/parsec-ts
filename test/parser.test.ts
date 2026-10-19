@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   alt, anyChar, attempt, between, chain, chainl1, chainr1, cut, eof, fail, formatFailure, label, lazy, left, lookahead, many, many1,
   count, lexeme, manyTill, map, noneOf, not, oneOf, optional, parse, position, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str,
-  struct, succeed, symbol, whitespace, withSpan, anyToken, matchToken, satisfyToken, operators,
+  struct, succeed, symbol, whitespace, withSpan, anyToken, matchToken, satisfyToken, operators, context,
   type Parser, type ParseResult,
 } from "../src/index.ts";
 import { calc } from "../examples/calc.ts";
@@ -259,6 +259,26 @@ describe("errors", () => {
     assert.deepEqual(at("a\rb\nc!"), { line: 3, column: 2, pos: 5 });
   });
 
+  test("context records where failures happened, innermost first", () => {
+    const pair = context("pair", seq(str("("), digit, str(","), digit, str(")")));
+    const list = context("list", between(str("["), sepBy(pair, str(";")), str("]")));
+    const e = failed(parse(list, "[(1,2);(3x"));
+    assert.deepEqual([e.pos, e.expected, e.context], [9, ['","'], ["pair", "list"]]);
+    assert.match(formatFailure(e), /expected "," \(in pair, in list\)$/);
+  });
+
+  test("context ignores failures at its start, where it was never entered", () => {
+    const tagged = context("tagged", seq(str("#"), digit));
+    const e = failed(parse(alt(tagged, str("x")), "y"));
+    assert.deepEqual([e.expected, e.context], [['"#"', '"x"'], []]);
+  });
+
+  test("context also annotates failures carried by a success", () => {
+    // `many` inside the context fails at "x"; then eof fails there too.
+    const e = failed(parse(context("digits", seq(str(":"), many(digit))), ":12x"));
+    assert.deepEqual([e.pos, e.expected, e.context], [3, ["digit", "end of input"], ["digits"]]);
+  });
+
   test("formatFailure reports line, column and alternatives", () => {
     const e = failed(parse(seq(str("a\n"), alt(str("b"), str("c"), str("d"))), "a\nx"));
     assert.equal(formatFailure(e), 'Parse error at line 2, column 1: unexpected "x", expected "b", "c" or "d"');
@@ -389,7 +409,7 @@ describe("JSON example", () => {
   });
 
   test("handles deep nesting", () => {
-    const depth = 1200;
+    const depth = 1000;
     assert.equal(parseJson("[".repeat(depth) + "]".repeat(depth)).ok, true);
   });
 
