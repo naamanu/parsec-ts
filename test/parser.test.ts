@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   alt, anyChar, between, chain, chainl1, chainr1, eof, fail, formatFailure, label, lazy, left, lookahead, many, many1,
-  manyTill, map, not, optional, parse, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str, succeed,
+  manyTill, map, not, optional, parse, position, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str, succeed, withSpan,
   type Parser, type ParseResult,
 } from "../src/index.ts";
 import { calc } from "../examples/calc.ts";
@@ -113,6 +113,15 @@ describe("combinators", () => {
     const minus = map(str("-"), () => (a: number, b: number) => a - b);
     assert.deepEqual(parse(chainl1(n, minus), "9-3-2"), ok(4));
     assert.deepEqual(parse(chainr1(n, minus), "9-3-2"), ok(8));
+  });
+
+  test("position and withSpan report input offsets", () => {
+    assert.deepEqual(parse(right(str("ab"), position), "ab"), ok(2));
+    const word = withSpan(regex(/[a-z]+/));
+    assert.deepEqual(parse(sepBy(word, str(" ")), "hi there"), ok([
+      { value: "hi", start: 0, end: 2 },
+      { value: "there", start: 3, end: 8 },
+    ]));
   });
 
   test("lazy builds its parser only once", () => {

@@ -53,6 +53,7 @@ Errors report the **furthest position** any alternative reached, and **everythin
 | `satisfy(pred, name)` | match one Unicode code point satisfying `pred` |
 | `anyChar` | match any one code point |
 | `eof` | match end of input |
+| `position` | the current offset, consuming nothing |
 | `succeed(v)` | consume nothing, return `v` |
 | `fail(expected)` | consume nothing, fail |
 
@@ -71,6 +72,7 @@ Errors report the **furthest position** any alternative reached, and **everythin
 | `chainl1(term, op)` / `chainr1` | left / right-associative operators |
 | `lookahead(p)` / `not(p, expected?)` | zero-width checks |
 | `label(p, name)` | rename what `p` reports as expected |
+| `withSpan(p)` | `{ value, start, end }`: the value plus the input range it came from |
 | `lazy(() => p)` | recursive grammars |
 
 ## Purity

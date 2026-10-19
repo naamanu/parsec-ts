@@ -91,7 +91,19 @@ export const anyChar: Parser<string> = satisfy(() => true, "any character");
 export const eof: Parser<null> = (input, pos) =>
   pos === input.length ? success(null, pos) : failure(["end of input"], pos);
 
+/** The current offset into the input, consuming nothing. */
+export const position: Parser<number> = (_, pos) => success(pos, pos);
+
 // Combinators
+
+/** A parsed value with the half-open range `[start, end)` of input it came from. */
+export type Span<T> = { readonly value: T; readonly start: number; readonly end: number };
+
+/** Run `p`, recording the input offsets it consumed. */
+export const withSpan = <T>(p: Parser<T>): Parser<Span<T>> => (input, start) => {
+  const r = p(input, start);
+  return r.ok ? success({ value: r.value, start, end: r.pos }, r.pos, r.failure) : r;
+};
 
 export const map = <A, B>(p: Parser<A>, f: (a: A) => B): Parser<B> => (input, pos) => {
   const r = p(input, pos);
