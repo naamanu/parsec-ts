@@ -5,3 +5,4 @@ export { anyToken, matchToken, satisfyToken } from "./tokens.ts";
 export * from "./run.ts";
 export * from "./operators.ts";
 export * from "./recovery.ts";
+export * from "./trace.ts";

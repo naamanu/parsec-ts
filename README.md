@@ -76,6 +76,29 @@ const errors = r.ok ? r.value.flatMap((n) => (n.ok ? [] : [locateFailure(source,
 
 Errors are part of the returned value, not collected through hidden state, so this stays purely functional. `locateFailure` adds `found`, `line` and `column`, exactly as `parse` does for its own failure.
 
+### Debugging with traces
+
+To see what a grammar actually tries, write it as a function of a `Tracer`, wrap the parsers you care about with `trace(name, p)`, and run it with `parseWithTrace`:
+
+```ts
+const grammar = (trace: Tracer = noTrace) => {
+  const num = trace("number", map(digit, Number));
+  const expr: Parser<number> = lazy(() => trace("expr", chainl1(factor, add)));
+  const factor = trace("factor", alt(num, between(str("("), expr, str(")"))));
+  return expr;
+};
+
+const { result, events } = parseWithTrace(grammar, "1+(2");
+console.log(formatTrace(events));
+// ✓ expr 0..1
+//   ✓ factor 0..1
+//     ✓ number 0..1
+//   ✗ factor 2 expected "+" | ")" at 4
+//   ...
+```
+
+`grammar()` with no argument builds the same parser without tracing. Events are returned as data: an array local to the call, frozen on return.
+
 ### Operator precedence
 
 `operators(atom, table)` builds an expression parser from a table of levels, ordered from highest precedence to lowest. Each level is left- or right-associative infix, prefix, or postfix:
@@ -128,6 +151,8 @@ For tokens, `found` defaults to the JSON of the token, and `column` to its index
 |---|---|
 | `parse(p, input, { describe?, locate? })` | run `p` on the whole input; failures are values |
 | `formatFailure(error)` | render a failure as a one-line message |
+| `parseWithTrace(build, input, options?)` | run `build(trace)` and return the result plus trace events |
+| `formatTrace(events)` | render trace events as an indented tree |
 | `locateFailure(input, failure, options?)` | add `found`, `line` and `column` to a raw failure, e.g. from `recover` |
 
 | Combinator | |

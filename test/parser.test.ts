@@ -4,6 +4,7 @@ import {
   alt, anyChar, attempt, between, chain, chainl1, chainr1, cut, eof, fail, formatFailure, label, lazy, left, lookahead, many, many1,
   count, lexeme, manyTill, map, noneOf, not, oneOf, optional, parse, position, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str,
   struct, succeed, symbol, whitespace, withSpan, anyToken, matchToken, satisfyToken, operators, context, recover, skipUntil, locateFailure,
+  parseWithTrace, formatTrace, noTrace, type Tracer,
   type Parser, type ParseResult,
 } from "../src/index.ts";
 import { calc } from "../examples/calc.ts";
@@ -327,6 +328,48 @@ describe("recovery", () => {
     assert.deepEqual(parse(right(skipUntil(str("!")), eof), "😀a"), ok(null));
     const skipTokens = right(skipUntil(matchToken(0)), anyToken<number>());
     assert.deepEqual(parse(skipTokens, [3, 2, 0]), ok(0));
+  });
+});
+
+describe("tracing", () => {
+  const grammar = (trace: Tracer = noTrace) => {
+    const num = trace("number", map(digit, Number));
+    const add = map(str("+"), () => (a: number, b: number) => a + b);
+    const expr: Parser<number> = lazy(() => trace("expr", chainl1(factor, add)));
+    const factor = trace("factor", alt(num, between(str("("), expr, str(")"))));
+    return expr;
+  };
+
+  test("records each traced run in start order, with depth and outcome", () => {
+    const { result, events } = parseWithTrace(grammar, "1+(2");
+    assert.equal(result.ok, false);
+    assert.deepEqual(events.map((e) => [e.name, e.depth, e.start, e.end, e.ok]), [
+      ["expr", 0, 0, 1, true],
+      ["factor", 1, 0, 1, true],
+      ["number", 2, 0, 1, true],
+      ["factor", 1, 2, 4, false],
+      ["number", 2, 2, 2, false],
+      ["expr", 2, 3, 4, true],
+      ["factor", 3, 3, 4, true],
+      ["number", 4, 3, 4, true],
+    ]);
+  });
+
+  test("formatTrace renders an indented tree", () => {
+    const { events } = parseWithTrace(grammar, "x");
+    assert.equal(formatTrace(events), [
+      '✗ expr 0 expected digit | "(" at 0',
+      '  ✗ factor 0 expected digit | "(" at 0',
+      "    ✗ number 0 expected digit at 0",
+    ].join("\n"));
+  });
+
+  test("results match an untraced parse, and events are frozen", () => {
+    for (const s of ["1+2", "(1+2)+3", "1+", ""]) {
+      assert.deepEqual(parseWithTrace(grammar, s).result, parse(grammar(), s));
+    }
+    const { events } = parseWithTrace(grammar, "1");
+    assert.ok(Object.isFrozen(events) && Object.isFrozen(events[0]));
   });
 });
 
