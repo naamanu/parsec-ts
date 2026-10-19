@@ -26,7 +26,7 @@ parse(expr, "1 x");
 // Parse error at line 1, column 3: unexpected "x", expected "*", "/", "+", "-" or end of input
 ```
 
-See [`examples/`](examples) for a calculator and a complete JSON parser.
+See [`examples/`](https://github.com/naamanu/parsec-ts/tree/main/examples) for a calculator and a complete JSON parser.
 
 ## Concepts
 
@@ -111,6 +111,7 @@ npm test            # run tests
 npm run typecheck   # tsc --noEmit
 npm run build       # emit dist/
 npm run check:pack  # build, then verify the npm tarball contents
+npm run docs        # API reference in docs/api (fails on undocumented exports)
 ```
 
 ### Releasing
