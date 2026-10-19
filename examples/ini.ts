@@ -27,17 +27,20 @@ const line = right(spaces, alt(header, left(pair, rest), blank));
 const toEol = skipUntil(regex(/[\r\n]/));
 const lines = many(recover(left(line, eol), right(toEol, eol)));
 
-/** Parse INI text into sections (keys before any header go in `""`), plus any errors. */
+/**
+ * Parse INI text into sections (keys before any header go in `""`), plus any errors.
+ * Sections and their key/value maps have null prototypes, so every name is a data key.
+ */
 export const parseIni = (input: string): ParseResult<{ readonly ini: Ini; readonly errors: readonly string[] }> => {
   const r = parse(lines, input);
   if (!r.ok) return r;
-  const ini: Record<string, Record<string, string>> = {};
+  const ini: Record<string, Record<string, string>> = Object.create(null);
   const errors: string[] = [];
   let section = "";
   for (const node of r.value) {
     if (!node.ok) errors.push(formatFailure(locateFailure(input, node.failure)));
     else if (node.value && "section" in node.value) section = node.value.section;
-    else if (node.value) (ini[section] ??= {})[node.value.key] = node.value.value;
+    else if (node.value) (ini[section] ??= Object.create(null))[node.value.key] = node.value.value;
   }
   return { ok: true, value: { ini, errors } };
 };

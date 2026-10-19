@@ -21,6 +21,10 @@ assertType<Equal<typeof a, Parser<string | null, string>>>(true);
 const st = struct({ x: str("x"), n: map(str("1"), Number) });
 assertType<Equal<ParserValue<typeof st>, { readonly x: string; readonly n: number }>>(true);
 
+const field = Symbol("field");
+const symbolStruct = struct({ [field]: map(str("1"), Number), 0: str("x") });
+assertType<Equal<typeof symbolStruct, Parser<{ readonly [field]: number; readonly 0: string }, string>>>(true);
+
 // Input-independent parsers fit any input.
 const anyInput: Parser<number, readonly number[]> = map(succeed(1), (x) => x + 1);
 const anyString: Parser<number> = map(succeed(1), (x) => x + 1);
@@ -29,6 +33,8 @@ const atEnd: Parser<null, Uint8Array> = eof;
 // Token parsers infer the token type.
 type Tok = { kind: "num" | "plus"; text: string };
 const num = satisfyToken((t: Tok) => t.kind === "num", "number");
+const tokenStruct = struct({ [field]: num });
+assertType<Equal<typeof tokenStruct, Parser<{ readonly [field]: Tok }, ArrayLike<Tok>>>>(true);
 const plus = matchToken<Tok>({ kind: "plus", text: "+" });
 const sum = seq(num, many(right(plus, num)));
 assertType<Equal<ParserValue<typeof sum>, [Tok, readonly Tok[]]>>(true);

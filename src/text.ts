@@ -8,6 +8,8 @@ export const str = (s: string): Parser<string> => (input, pos) =>
 /**
  * Match a regular expression at the current position. The `g` and `y` flags
  * are ignored. `^`, `$` and lookbehind see the whole input.
+ * Unicode patterns fail at offsets inside a surrogate pair if the match
+ * would start before the requested position.
  */
 export const regex = (re: RegExp, name: string = String(re)): Parser<string> => {
   // Private to this parser. `lastIndex` is set right before every `exec`, so no
@@ -16,7 +18,8 @@ export const regex = (re: RegExp, name: string = String(re)): Parser<string> => 
   return (input, pos) => {
     sticky.lastIndex = pos;
     const m = sticky.exec(input);
-    return m ? success(m[0], pos + m[0].length) : failure([name], pos);
+    // Unicode regexes can rewind lastIndex to the start of a surrogate pair.
+    return m && m.index === pos ? success(m[0], pos + m[0].length) : failure([name], pos);
   };
 };
 
