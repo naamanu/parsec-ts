@@ -13,7 +13,12 @@
 export type Input = string | ArrayLike<unknown>;
 
 /** The furthest position a parse failed at, and what was expected there. */
-export type Failure = { readonly pos: number; readonly expected: readonly string[] };
+export type Failure = {
+  readonly pos: number;
+  readonly expected: readonly string[];
+  /** Names from enclosing `context` combinators, innermost first. */
+  readonly context?: readonly string[];
+};
 
 /**
  * Outcome of running a parser at a position. A success also carries the
@@ -61,12 +66,17 @@ export const failure = (expected: readonly string[], pos: number): Failed =>
 export const failWith = (r: Failed, failure: Failure): Failed =>
   r.fatal ? { ok: false, failure, fatal: true } : { ok: false, failure };
 
-/** @internal Keep the furthest failure; at the same position, combine what was expected. */
+/**
+ * @internal Keep the furthest failure; at the same position, combine what was
+ * expected and keep the more specific (longer) context.
+ */
 export function merge(a: Failure | undefined, b: Failure): Failure;
 export function merge(a: Failure | undefined, b: Failure | undefined): Failure | undefined;
 export function merge(a: Failure | undefined, b: Failure | undefined): Failure | undefined {
   if (!a) return b;
   if (!b) return a;
   if (a.pos !== b.pos) return a.pos > b.pos ? a : b;
-  return { pos: a.pos, expected: [...new Set([...a.expected, ...b.expected])] };
+  const expected = [...new Set([...a.expected, ...b.expected])];
+  const context = (b.context?.length ?? 0) > (a.context?.length ?? 0) ? b.context : a.context;
+  return context ? { pos: a.pos, expected, context } : { pos: a.pos, expected };
 }

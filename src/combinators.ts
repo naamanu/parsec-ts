@@ -127,6 +127,22 @@ export const label = <T, I = string>(p: Parser<T, I>, name: string): Parser<T, I
 };
 
 /**
+ * Record that failures inside `p` happened while parsing `name`, so errors
+ * can say where in the grammar they occurred: `context("object", obj)` gives
+ * `... expected ":" (in object key, in object)`. Unlike `label`, it keeps what
+ * `p` expected.
+ *
+ * Only failures after `p` has consumed input count as "inside": if `p` fails
+ * at its start, it was never entered (that's what `label` is for).
+ */
+export const context = <T, I = string>(name: string, p: Parser<T, I>): Parser<T, I> => (input, pos) => {
+  const within = (f: Failure): Failure => (f.pos > pos ? { ...f, context: [...(f.context ?? []), name] } : f);
+  const r = p(input, pos);
+  if (!r.ok) return failWith(r, within(r.failure));
+  return r.failure ? success(r.value, r.pos, within(r.failure)) : r;
+};
+
+/**
  * Commit to `p`: if it fails, the failure is fatal, so enclosing `alt`,
  * `many`, `optional`, `sepBy`, etc. propagate it rather than backtracking.
  * Place it after the part of a grammar that identifies a construct, e.g.

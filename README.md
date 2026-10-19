@@ -38,6 +38,14 @@ A `Parser<T, I = string>` is a plain function `(input: I, pos: number) => Result
 
 Errors report the **furthest position** any alternative reached, and **everything that would have been accepted there**. That includes alternatives tried by `alt`, and the last attempt of `many` or `optional`. Use `label` to give a group of parsers a friendlier name.
 
+Use `context(name, p)` to record *where* in the grammar a failure happened. Contexts appear innermost first:
+
+```
+Parse error at line 1, column 16: unexpected "2", expected ":" (in object key, in object, in array, in object)
+```
+
+`label` and `context` complement each other. `label` renames what's expected when `p` fails at its start. `context` annotates failures *inside* `p`, once it has consumed input.
+
 ### Backtracking
 
 By default `alt` backtracks: if an alternative fails after consuming input, the next one is tried from the original position.
@@ -125,6 +133,7 @@ For tokens, `found` defaults to the JSON of the token, and `column` to its index
 | `operators(atom, table)` | expression parser from a precedence table (infix, prefix, postfix) |
 | `lookahead(p)` / `not(p, expected?)` | zero-width checks |
 | `label(p, name)` | rename what `p` reports as expected |
+| `context(name, p)` | note that failures inside `p` happened while parsing `name` |
 | `withSpan(p)` | `{ value, start, end }`: the value plus the input range it came from |
 | `lazy(() => p)` | recursive grammars |
 
@@ -140,7 +149,7 @@ Lexemes skip whitespace *after* themselves, so start a grammar with `right(white
 
 Every exported function is referentially transparent: no exceptions, no shared mutable state, readonly results. A few combinators use loops or private mutable state inside, because JavaScript lacks tail-call elimination. That state never escapes a single call.
 
-Grammars are recursive descent, so very deeply nested input can exhaust the JavaScript call stack. With Node's default stack, the bundled JSON example handles about 1,500 levels of nested arrays, and the calculator about 800 levels of parentheses.
+Grammars are recursive descent, so very deeply nested input can exhaust the JavaScript call stack. With Node's default stack, the bundled JSON example handles about 1,100 levels of nested arrays, and the calculator about 800 levels of parentheses.
 
 ## Development
 
