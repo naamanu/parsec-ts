@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import {
   alt, anyChar, attempt, between, chain, chainl1, chainr1, cut, eof, fail, formatFailure, label, lazy, left, lookahead, many, many1,
   count, lexeme, manyTill, map, noneOf, not, oneOf, optional, parse, position, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str,
-  struct, succeed, symbol, whitespace, withSpan,
+  struct, succeed, symbol, whitespace, withSpan, anyToken, matchToken, satisfyToken,
   type Parser, type ParseResult,
 } from "../src/index.ts";
 import { calc } from "../examples/calc.ts";
 import { parseJson } from "../examples/json.ts";
+import { evaluate } from "../examples/tokens.ts";
 
 const ok = <T>(value: T) => ({ ok: true, value });
 
@@ -261,6 +262,55 @@ describe("errors", () => {
   test("formatFailure reports line, column and alternatives", () => {
     const e = failed(parse(seq(str("a\n"), alt(str("b"), str("c"), str("d"))), "a\nx"));
     assert.equal(formatFailure(e), 'Parse error at line 2, column 1: unexpected "x", expected "b", "c" or "d"');
+  });
+});
+
+describe("non-string input", () => {
+  type Tok = { kind: "num" | "plus"; text: string };
+  const n = (text: string): Tok => ({ kind: "num", text });
+  const plusTok: Tok = { kind: "plus", text: "+" };
+  const num = map(satisfyToken((t: Tok) => t.kind === "num", "number"), (t) => Number(t.text));
+  const plus = satisfyToken((t: Tok) => t.kind === "plus", '"+"');
+  const sum = map(sepBy1(num, plus), (xs) => xs.reduce((a, b) => a + b, 0));
+
+  test("token arrays work with the generic combinators", () => {
+    assert.deepEqual(parse(sum, [n("1"), plusTok, n("2"), plusTok, n("3")]), ok(6));
+    assert.deepEqual(parse(seq(anyToken<Tok>(), eof, position), [n("1")]), ok([n("1"), null, 1]));
+  });
+
+  test("token errors describe the token and default to index columns", () => {
+    const e = failed(parse(sum, [n("1"), n("2")]));
+    assert.deepEqual([e.pos, e.column, e.found, e.expected], [1, 2, '{"kind":"num","text":"2"}', ['"+"', "end of input"]]);
+    assert.equal(failed(parse(sum, [n("1"), plusTok])).found, "end of input");
+  });
+
+  test("describe and locate options customise errors", () => {
+    const e = failed(parse(sum, [n("1"), n("2")], {
+      describe: (ts, pos) => ts[pos]!.text,
+      locate: (_, pos) => ({ line: 7, column: pos * 10 }),
+    }));
+    assert.deepEqual([e.found, e.line, e.column], ["2", 7, 10]);
+  });
+
+  test("matchToken and bytes", () => {
+    const magic = seq(matchToken(0x89), matchToken(0x50, "P"), count(2, anyToken<number>()));
+    assert.deepEqual(parse(magic, new Uint8Array([0x89, 0x50, 1, 2])), ok([0x89, 0x50, [1, 2]]));
+    const e = failed(parse(magic, new Uint8Array([0x89, 0x51])));
+    assert.deepEqual([e.found, e.expected], ["0x51", ["P"]]);
+    assert.equal(failed(parse(matchToken("a"), ["b"])).expected[0], '"a"');
+  });
+});
+
+describe("token example", () => {
+  test("evaluates via a lexer and a token parser", () => {
+    assert.deepEqual(evaluate("2 * (3 + 4)"), ok(14));
+    assert.deepEqual(evaluate("10 - 4 - 3"), ok(3));
+  });
+
+  test("errors from either stage point into the source", () => {
+    assert.equal(formatFailure(failed(evaluate("1 + x"))), 'Parse error at line 1, column 5: unexpected "x", expected token or end of input');
+    assert.equal(formatFailure(failed(evaluate("1 +\n  2 3"))), 'Parse error at line 2, column 5: unexpected "3", expected "*", "/", "+", "-" or end of input');
+    assert.equal(formatFailure(failed(evaluate("(1 + 2"))), 'Parse error at line 1, column 7: unexpected end of input, expected "*", "/", "+", "-" or ")"');
   });
 });
 
