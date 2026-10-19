@@ -36,3 +36,6 @@ jobs:
           fi
       # prepublishOnly runs typecheck, tests, build and the tarball check.
       - run: npm publish --access public
+      # JSR authenticates with the same OIDC token; link the package to this
+      # repository in its jsr.io settings first.
+      - run: npx jsr publish

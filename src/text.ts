@@ -9,7 +9,7 @@ export const str = (s: string): Parser<string> => (input, pos) =>
  * Match a regular expression at the current position. The `g` and `y` flags
  * are ignored. `^`, `$` and lookbehind see the whole input.
  */
-export const regex = (re: RegExp, name = String(re)): Parser<string> => {
+export const regex = (re: RegExp, name: string = String(re)): Parser<string> => {
   // Private to this parser. `lastIndex` is set right before every `exec`, so no
   // state carries over between calls.
   const sticky = new RegExp(re.source, re.flags.replace(/[gy]/g, "") + "y");
