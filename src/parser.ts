@@ -325,6 +325,17 @@ export const chainr1 = <T>(term: Parser<T>, op: Parser<(a: T, b: T) => T>): Pars
   return success(values.slice(0, -1).reduceRight((acc, v, i) => seps[i]!(v, acc), last), end, fail);
 };
 
+// Lexing helpers
+
+/** Zero or more whitespace characters (`\s*`). */
+export const whitespace: Parser<string> = regex(/\s*/, "whitespace");
+
+/** Run `p`, then skip trailing whitespace (or whatever `ws` matches). */
+export const lexeme = <T>(p: Parser<T>, ws: Parser<unknown> = whitespace): Parser<T> => left(p, ws);
+
+/** Match the literal `s`, then skip trailing whitespace. */
+export const symbol = (s: string, ws: Parser<unknown> = whitespace): Parser<string> => lexeme(str(s), ws);
+
 // Running
 
 const locate = (input: string, pos: number): { line: number; column: number } => {

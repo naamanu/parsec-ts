@@ -9,15 +9,13 @@ npm install parsec-ts
 ## Quick start
 
 ```ts
-import { alt, between, chainl1, lazy, left, map, parse, regex, str, formatFailure, type Parser } from "parsec-ts";
+import { alt, between, chainl1, lazy, lexeme, map, parse, regex, symbol, formatFailure, type Parser } from "parsec-ts";
 
-const ws = regex(/\s*/);
-const token = <T>(p: Parser<T>) => left(p, ws);
-const num = token(map(regex(/\d+/, "number"), Number));
-const op = (c: string, f: (a: number, b: number) => number) => token(map(str(c), () => f));
+const num = lexeme(map(regex(/\d+/, "number"), Number));
+const op = (c: string, f: (a: number, b: number) => number) => map(symbol(c), () => f);
 
 const expr: Parser<number> = lazy(() => chainl1(term, alt(op("+", (a, b) => a + b), op("-", (a, b) => a - b))));
-const factor = alt(num, between(token(str("(")), expr, token(str(")"))));
+const factor = alt(num, between(symbol("("), expr, symbol(")")));
 const term = chainl1(factor, alt(op("*", (a, b) => a * b), op("/", (a, b) => a / b)));
 
 const result = parse(expr, "2 * (3 + 4)");
@@ -74,6 +72,14 @@ Errors report the **furthest position** any alternative reached, and **everythin
 | `label(p, name)` | rename what `p` reports as expected |
 | `withSpan(p)` | `{ value, start, end }`: the value plus the input range it came from |
 | `lazy(() => p)` | recursive grammars |
+
+| Lexing | |
+|---|---|
+| `whitespace` | zero or more whitespace characters |
+| `lexeme(p, ws?)` | `p`, then skip trailing whitespace (or `ws`) |
+| `symbol(s, ws?)` | the literal `s`, then skip trailing whitespace (or `ws`) |
+
+Lexemes skip whitespace *after* themselves, so start a grammar with `right(whitespace, p)` to allow leading whitespace.
 
 ## Purity
 
