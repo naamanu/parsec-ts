@@ -2,8 +2,8 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   alt, anyChar, between, chain, chainl1, chainr1, eof, fail, formatFailure, label, lazy, left, lookahead, many, many1,
-  lexeme, manyTill, map, not, optional, parse, position, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str,
-  succeed, symbol, whitespace, withSpan,
+  count, lexeme, manyTill, map, noneOf, not, oneOf, optional, parse, position, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str,
+  struct, succeed, symbol, whitespace, withSpan,
   type Parser, type ParseResult,
 } from "../src/index.ts";
 import { calc } from "../examples/calc.ts";
@@ -80,6 +80,44 @@ describe("combinators", () => {
     assert.deepEqual(parse(many1(digit), "123"), ok(["1", "2", "3"]));
     assert.deepEqual(failed(parse(many1(digit), "")).expected, ["digit"]);
     assert.deepEqual(parse(optional(digit), ""), ok(null));
+  });
+
+  test("optional with a fallback", () => {
+    assert.deepEqual(parse(optional(map(digit, Number), 0), ""), ok(0));
+    assert.deepEqual(parse(optional(map(digit, Number), 0), "7"), ok(7));
+  });
+
+  test("oneOf and noneOf", () => {
+    assert.deepEqual(parse(many(oneOf("+-😀")), "-😀+"), ok(["-", "😀", "+"]));
+    assert.deepEqual(failed(parse(oneOf("ab"), "c")).expected, ['one of "ab"']);
+    assert.deepEqual(parse(many(noneOf('"\\')), "ab😀"), ok(["a", "b", "😀"]));
+    assert.equal(parse(noneOf("a"), "a").ok, false);
+    assert.equal(parse(noneOf("a"), "").ok, false);
+  });
+
+  test("count", () => {
+    const hex4 = map(count(4, regex(/[0-9a-f]/)), (cs) => cs.join(""));
+    assert.deepEqual(parse(hex4, "beef"), ok("beef"));
+    assert.equal(parse(hex4, "bee").ok, false);
+    assert.equal(parse(hex4, "beefe").ok, false);
+    assert.deepEqual(parse(count(0, digit), ""), ok([]));
+  });
+
+  test("struct collects named fields in key order", () => {
+    const assignment = struct({
+      name: lexeme(regex(/[a-z]+/)),
+      _eq: symbol("="),
+      value: map(regex(/\d+/), Number),
+    });
+    const r = parse(assignment, "x = 42");
+    assert.deepEqual(r, ok({ name: "x", _eq: "=", value: 42 }));
+    if (r.ok) {
+      const value: number = r.value.value; // field types are inferred...
+      // @ts-expect-error ...precisely, not as `any`
+      const wrong: string = r.value.value;
+      assert.equal(value, wrong);
+    }
+    assert.deepEqual(failed(parse(assignment, "x 42")).expected, ['"="']);
   });
 
   test("many stops on zero-width success", () => {

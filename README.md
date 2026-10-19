@@ -50,6 +50,7 @@ Errors report the **furthest position** any alternative reached, and **everythin
 | `regex(re, name?)` | match a regex at the current position |
 | `satisfy(pred, name)` | match one Unicode code point satisfying `pred` |
 | `anyChar` | match any one code point |
+| `oneOf(chars)` / `noneOf(chars)` | match one character in / not in `chars` |
 | `eof` | match end of input |
 | `position` | the current offset, consuming nothing |
 | `succeed(v)` | consume nothing, return `v` |
@@ -63,8 +64,10 @@ Errors report the **furthest position** any alternative reached, and **everythin
 | `left(a, b)` / `right(a, b)` | run both, keep one value |
 | `between(open, p, close)` | keep the middle value |
 | `alt(...ps)` | ordered choice with backtracking |
-| `optional(p)` | `p` or `null` |
+| `struct({ key: p, ... })` | run in key order, returning a typed object |
+| `optional(p, fallback?)` | `p`, or `fallback` (default `null`) |
 | `many(p)` / `many1(p)` | zero / one or more |
+| `count(n, p)` | exactly `n` |
 | `manyTill(p, end)` | repeat `p` until `end` |
 | `sepBy(p, sep)` / `sepBy1` / `sepEndBy` | separated lists |
 | `chainl1(term, op)` / `chainr1` | left / right-associative operators |

@@ -88,6 +88,18 @@ export const satisfy = (pred: (char: string) => boolean, name: string): Parser<s
 
 export const anyChar: Parser<string> = satisfy(() => true, "any character");
 
+/** Match one character from `chars`. */
+export const oneOf = (chars: string): Parser<string> => {
+  const set = new Set(chars);
+  return satisfy((c) => set.has(c), `one of ${JSON.stringify(chars)}`);
+};
+
+/** Match one character not in `chars` (fails at end of input). */
+export const noneOf = (chars: string): Parser<string> => {
+  const set = new Set(chars);
+  return satisfy((c) => !set.has(c), `none of ${JSON.stringify(chars)}`);
+};
+
 export const eof: Parser<null> = (input, pos) =>
   pos === input.length ? success(null, pos) : failure(["end of input"], pos);
 
@@ -251,9 +263,54 @@ export const manyTill = <T>(p: Parser<T>, end: Parser<unknown>): Parser<readonly
   }
 };
 
-export const optional = <T>(p: Parser<T>): Parser<T | null> => (input, pos) => {
-  const r = p(input, pos);
-  return r.ok ? r : success(null, pos, r.failure);
+/** `p`, or `fallback` (default `null`) without consuming input if `p` fails. */
+export function optional<T>(p: Parser<T>): Parser<T | null>;
+export function optional<T, D>(p: Parser<T>, fallback: D): Parser<T | D>;
+export function optional<T, D>(p: Parser<T>, fallback: D | null = null): Parser<T | D | null> {
+  return (input, pos) => {
+    const r = p(input, pos);
+    return r.ok ? r : success(fallback, pos, r.failure);
+  };
+}
+
+/** Exactly `n` repetitions of `p`. */
+export const count = <T>(n: number, p: Parser<T>): Parser<readonly T[]> => (input, start) => {
+  const values: T[] = [];
+  let pos = start;
+  let fail: Failure | undefined;
+  for (let i = 0; i < n; i++) {
+    const r = p(input, pos);
+    if (!r.ok) return { ok: false, failure: merge(fail, r.failure) };
+    fail = merge(fail, r.failure);
+    values.push(r.value);
+    pos = r.pos;
+  }
+  return success(values, pos, fail);
+};
+
+type Fields<S extends Readonly<Record<string, Parser<any>>>> = {
+  readonly [K in keyof S]: S[K] extends Parser<infer T> ? T : never;
+};
+
+/**
+ * Run each field's parser in key order, collecting the values into an object
+ * with the same keys: `struct({ name: ident, _: symbol("="), value: expr })`.
+ */
+export const struct = <S extends Readonly<Record<string, Parser<any>>>>(shape: S): Parser<Fields<S>> => {
+  const fields = Object.entries(shape);
+  return (input, start) => {
+    const entries: [string, unknown][] = [];
+    let pos = start;
+    let fail: Failure | undefined;
+    for (const [key, p] of fields) {
+      const r = p(input, pos);
+      if (!r.ok) return { ok: false, failure: merge(fail, r.failure) };
+      fail = merge(fail, r.failure);
+      entries.push([key, r.value]);
+      pos = r.pos;
+    }
+    return success(Object.fromEntries(entries) as Fields<S>, pos, fail);
+  };
 };
 
 type Separated<T, S> = { values: T[]; seps: S[]; pos: number; fail: Failure | undefined };
