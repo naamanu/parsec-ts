@@ -61,6 +61,21 @@ parse(alt(letStmt, exprStmt), "let 1");
 
 `attempt(p)` undoes `cut` inside `p`, turning its fatal failures back into ordinary ones.
 
+### Error recovery
+
+To report *every* error in one run, rather than stopping at the first, wrap the repeating unit in `recover(p, sync)`. If `p` fails, `recover` keeps the failure as an **error node** in the result, then runs `sync` to skip the broken input and carries on:
+
+```ts
+const sync = left(skipUntil(str(";")), optional(symbol(";")));
+const program = many(recover(statement, sync));
+
+const r = parse(program, source);
+// r.value: [{ ok: true, value: stmt }, { ok: false, failure, skipped: { start, end } }, ...]
+const errors = r.ok ? r.value.flatMap((n) => (n.ok ? [] : [locateFailure(source, n.failure)])) : [];
+```
+
+Errors are part of the returned value, not collected through hidden state, so this stays purely functional. `locateFailure` adds `found`, `line` and `column`, exactly as `parse` does for its own failure.
+
 ### Operator precedence
 
 `operators(atom, table)` builds an expression parser from a table of levels, ordered from highest precedence to lowest. Each level is left- or right-associative infix, prefix, or postfix:
@@ -113,6 +128,7 @@ For tokens, `found` defaults to the JSON of the token, and `column` to its index
 |---|---|
 | `parse(p, input, { describe?, locate? })` | run `p` on the whole input; failures are values |
 | `formatFailure(error)` | render a failure as a one-line message |
+| `locateFailure(input, failure, options?)` | add `found`, `line` and `column` to a raw failure, e.g. from `recover` |
 
 | Combinator | |
 |---|---|
@@ -136,6 +152,8 @@ For tokens, `found` defaults to the JSON of the token, and `column` to its index
 | `context(name, p)` | note that failures inside `p` happened while parsing `name` |
 | `withSpan(p)` | `{ value, start, end }`: the value plus the input range it came from |
 | `lazy(() => p)` | recursive grammars |
+| `recover(p, sync)` | on failure, return an error node and skip ahead with `sync` |
+| `skipUntil(end)` | skip input up to where `end` would match (never fails) |
 
 | Lexing | |
 |---|---|
