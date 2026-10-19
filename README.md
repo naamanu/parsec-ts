@@ -26,7 +26,16 @@ parse(expr, "1 x");
 // Parse error at line 1, column 3: unexpected "x", expected "*", "/", "+", "-" or end of input
 ```
 
-See [`examples/`](https://github.com/naamanu/parsec-ts/tree/main/examples) for a calculator, a complete JSON parser, and a two-stage lexer + token parser.
+More complete examples are in [`examples/`](https://github.com/naamanu/parsec-ts/tree/main/examples):
+
+| Example | Shows |
+|---|---|
+| `calc.ts` | an arithmetic calculator built with `operators` |
+| `json.ts` | a complete JSON parser with `cut` and `context` |
+| `csv.ts` | RFC 4180 CSV: quoted fields, every line-ending style |
+| `ini.ts` | INI files, reporting every bad line through `recover` |
+| `tokens.ts` | a lexer feeding a token parser, with errors mapped back to the source |
+| `lang.ts` | a tiny language: AST with spans, `cut`, `context`, `recover`, and a pure evaluator with runtime errors |
 
 ## Concepts
 
