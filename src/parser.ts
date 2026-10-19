@@ -137,11 +137,39 @@ export const seq = <Ps extends readonly Parser<any>[]>(...ps: Ps): Parser<Values
   return success(values as unknown as Values<Ps>, pos, fail);
 };
 
+// The combinators below are written directly rather than composed from
+// `map`/`seq`, so each one costs a single stack frame. That keeps deeply
+// nested grammars well clear of the JavaScript call-stack limit.
+
 /** Run `a` then `b`, keeping the value of `a`. */
-export const left = <A>(a: Parser<A>, b: Parser<unknown>): Parser<A> => map(seq(a, b), ([v]) => v);
+export const left = <A>(a: Parser<A>, b: Parser<unknown>): Parser<A> => (input, pos) => {
+  const ra = a(input, pos);
+  if (!ra.ok) return ra;
+  const rb = b(input, ra.pos);
+  if (!rb.ok) return { ok: false, failure: merge(ra.failure, rb.failure) };
+  return success(ra.value, rb.pos, merge(ra.failure, rb.failure));
+};
 
 /** Run `a` then `b`, keeping the value of `b`. */
-export const right = <B>(a: Parser<unknown>, b: Parser<B>): Parser<B> => map(seq(a, b), ([, v]) => v);
+export const right = <B>(a: Parser<unknown>, b: Parser<B>): Parser<B> => (input, pos) => {
+  const ra = a(input, pos);
+  if (!ra.ok) return ra;
+  const rb = b(input, ra.pos);
+  if (!rb.ok) return { ok: false, failure: merge(ra.failure, rb.failure) };
+  return success(rb.value, rb.pos, merge(ra.failure, rb.failure));
+};
+
+export const between = <T>(open: Parser<unknown>, p: Parser<T>, close: Parser<unknown>): Parser<T> =>
+  (input, pos) => {
+    const ro = open(input, pos);
+    if (!ro.ok) return ro;
+    const rp = p(input, ro.pos);
+    if (!rp.ok) return { ok: false, failure: merge(ro.failure, rp.failure) };
+    const fail = merge(ro.failure, rp.failure);
+    const rc = close(input, rp.pos);
+    if (!rc.ok) return { ok: false, failure: merge(fail, rc.failure) };
+    return success(rp.value, rc.pos, merge(fail, rc.failure));
+  };
 
 /** Ordered choice with backtracking. Failures of every tried alternative are merged. */
 export const alt = <Ts extends readonly unknown[]>(
@@ -194,8 +222,16 @@ export const many = <T>(p: Parser<T>): Parser<readonly T[]> => (input, start) =>
   }
 };
 
-export const many1 = <T>(p: Parser<T>): Parser<readonly T[]> =>
-  map(seq(p, many(p)), ([first, rest]) => [first, ...rest]);
+export const many1 = <T>(p: Parser<T>): Parser<readonly T[]> => {
+  const rest = many(p);
+  return (input, pos) => {
+    const r = p(input, pos);
+    if (!r.ok) return r;
+    const rs = rest(input, r.pos);
+    if (!rs.ok) return rs;
+    return success([r.value, ...rs.value], rs.pos, merge(r.failure, rs.failure));
+  };
+};
 
 /** Repeat `p` until `end` succeeds; `end` is consumed but its value dropped. */
 export const manyTill = <T>(p: Parser<T>, end: Parser<unknown>): Parser<readonly T[]> => (input, start) => {
@@ -215,20 +251,53 @@ export const manyTill = <T>(p: Parser<T>, end: Parser<unknown>): Parser<readonly
   }
 };
 
-export const optional = <T>(p: Parser<T>): Parser<T | null> => alt(p, succeed(null));
+export const optional = <T>(p: Parser<T>): Parser<T | null> => (input, pos) => {
+  const r = p(input, pos);
+  return r.ok ? r : success(null, pos, r.failure);
+};
 
-export const sepBy1 = <T>(p: Parser<T>, sep: Parser<unknown>): Parser<readonly T[]> =>
-  map(seq(p, many(right(sep, p))), ([first, rest]) => [first, ...rest]);
+type Separated<T, S> = { values: T[]; seps: S[]; pos: number; fail: Failure | undefined };
 
-export const sepBy = <T>(p: Parser<T>, sep: Parser<unknown>): Parser<readonly T[]> =>
-  alt(sepBy1(p, sep), succeed<readonly T[]>([]));
+/**
+ * Continue `item (sep item)*` after a first item has already been parsed.
+ * A `sep` not followed by an `item` is left unconsumed, unless `trailing`.
+ */
+const separated = <T, S>(
+  item: Parser<T>, sep: Parser<S>, trailing: boolean,
+  input: string, first: T, start: number, firstFail: Failure | undefined,
+): Separated<T, S> => {
+  const values = [first];
+  const seps: S[] = [];
+  let pos = start;
+  let fail = firstFail;
+  for (;;) {
+    const s = sep(input, pos);
+    fail = merge(fail, s.failure);
+    if (!s.ok) return { values, seps, pos, fail };
+    const r = item(input, s.pos);
+    fail = merge(fail, r.failure);
+    if (!r.ok) return { values, seps, pos: trailing ? s.pos : pos, fail };
+    if (r.pos === pos) return { values, seps, pos, fail }; // no progress
+    values.push(r.value);
+    seps.push(s.value);
+    pos = r.pos;
+  }
+};
 
-/** Like `sepBy`, but allows a trailing separator. */
-export const sepEndBy = <T>(p: Parser<T>, sep: Parser<unknown>): Parser<readonly T[]> =>
-  left(sepBy(p, sep), optional(sep));
+const sepList = <T>(p: Parser<T>, sep: Parser<unknown>, allowEmpty: boolean, trailing: boolean): Parser<readonly T[]> =>
+  (input, pos) => {
+    const r = p(input, pos);
+    if (!r.ok) return allowEmpty ? success([], pos, r.failure) : r;
+    const s = separated(p, sep, trailing, input, r.value, r.pos, r.failure);
+    return success(s.values, s.pos, s.fail);
+  };
 
-export const between = <T>(open: Parser<unknown>, p: Parser<T>, close: Parser<unknown>): Parser<T> =>
-  right(open, left(p, close));
+export const sepBy1 = <T>(p: Parser<T>, sep: Parser<unknown>): Parser<readonly T[]> => sepList(p, sep, false, false);
+
+export const sepBy = <T>(p: Parser<T>, sep: Parser<unknown>): Parser<readonly T[]> => sepList(p, sep, true, false);
+
+/** Like `sepBy`, but allows a trailing separator after at least one item. */
+export const sepEndBy = <T>(p: Parser<T>, sep: Parser<unknown>): Parser<readonly T[]> => sepList(p, sep, true, true);
 
 /**
  * Defer construction so parsers can be mutually recursive. The factory runs
@@ -240,17 +309,21 @@ export const lazy = <T>(f: () => Parser<T>): Parser<T> => {
 };
 
 /** Left-associative chain: `term (op term)*`, folded left. */
-export const chainl1 = <T>(term: Parser<T>, op: Parser<(a: T, b: T) => T>): Parser<T> =>
-  map(seq(term, many(seq(op, term))), ([first, rest]) =>
-    rest.reduce((acc, [f, b]) => f(acc, b), first),
-  );
+export const chainl1 = <T>(term: Parser<T>, op: Parser<(a: T, b: T) => T>): Parser<T> => (input, pos) => {
+  const r = term(input, pos);
+  if (!r.ok) return r;
+  const { values, seps, pos: end, fail } = separated(term, op, false, input, r.value, r.pos, r.failure);
+  return success(values.slice(1).reduce((acc, v, i) => seps[i]!(acc, v), values[0]!), end, fail);
+};
 
 /** Right-associative chain: `term (op term)*`, folded right. */
-export const chainr1 = <T>(term: Parser<T>, op: Parser<(a: T, b: T) => T>): Parser<T> =>
-  map(seq(term, many(seq(op, term))), ([first, rest]) => {
-    const values = [first, ...rest.map(([, v]) => v)];
-    return values.slice(0, -1).reduceRight((acc, v, i) => rest[i]![0](v, acc), values[values.length - 1]!);
-  });
+export const chainr1 = <T>(term: Parser<T>, op: Parser<(a: T, b: T) => T>): Parser<T> => (input, pos) => {
+  const r = term(input, pos);
+  if (!r.ok) return r;
+  const { values, seps, pos: end, fail } = separated(term, op, false, input, r.value, r.pos, r.failure);
+  const last = values[values.length - 1]!;
+  return success(values.slice(0, -1).reduceRight((acc, v, i) => seps[i]!(v, acc), last), end, fail);
+};
 
 // Running
 

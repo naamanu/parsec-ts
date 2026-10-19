@@ -99,6 +99,7 @@ describe("combinators", () => {
     assert.equal(parse(sepBy(digit, comma), "1,2,").ok, false);
     assert.deepEqual(parse(sepEndBy(digit, comma), "1,2,"), ok(["1", "2"]));
     assert.deepEqual(parse(sepEndBy(digit, comma), "1,2"), ok(["1", "2"]));
+    assert.equal(parse(sepEndBy(digit, comma), ",").ok, false);
   });
 
   test("lookahead and not consume nothing", () => {
@@ -192,6 +193,11 @@ describe("JSON example", () => {
       JSON.stringify({ nested: [[[]]], unicode: "😀 日本", n: 1e21 }, null, 2),
     ];
     for (const doc of docs) assert.deepEqual(parseJson(doc), ok(JSON.parse(doc)), doc);
+  });
+
+  test("handles deep nesting", () => {
+    const depth = 1200;
+    assert.equal(parseJson("[".repeat(depth) + "]".repeat(depth)).ok, true);
   });
 
   test("rejects invalid documents", () => {
