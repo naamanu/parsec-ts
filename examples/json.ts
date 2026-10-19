@@ -1,13 +1,14 @@
 import {
-  alt, between, label, lazy, left, many, map, parse, regex, right, satisfy, sepBy, seq, str,
+  alt, between, label, lazy, left, lexeme, many, map, parse, regex, right, satisfy, sepBy, seq, str, symbol,
   type Parser, type ParseResult,
 } from "../src/index.ts";
 
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
 
+// JSON allows only these four whitespace characters, unlike the default `\s`.
 const ws = regex(/[ \t\n\r]*/, "whitespace");
-const token = <T>(p: Parser<T>): Parser<T> => left(p, ws);
-const sym = (s: string) => token(str(s));
+const token = <T>(p: Parser<T>): Parser<T> => lexeme(p, ws);
+const sym = (s: string) => symbol(s, ws);
 const keyword = <T>(s: string, value: T) => token(map(str(s), () => value));
 
 const escapes: Readonly<Record<string, string>> = {

@@ -2,7 +2,8 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   alt, anyChar, between, chain, chainl1, chainr1, eof, fail, formatFailure, label, lazy, left, lookahead, many, many1,
-  manyTill, map, not, optional, parse, position, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str, succeed, withSpan,
+  lexeme, manyTill, map, not, optional, parse, position, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str,
+  succeed, symbol, whitespace, withSpan,
   type Parser, type ParseResult,
 } from "../src/index.ts";
 import { calc } from "../examples/calc.ts";
@@ -123,6 +124,14 @@ describe("combinators", () => {
       { value: "hi", start: 0, end: 2 },
       { value: "there", start: 3, end: 8 },
     ]));
+  });
+
+  test("whitespace, lexeme, symbol", () => {
+    const list = right(whitespace, between(symbol("["), sepBy(lexeme(digit), symbol(",")), symbol("]")));
+    assert.deepEqual(parse(list, " [ 1 ,\n2 ]  "), ok(["1", "2"]));
+    const dots = regex(/\.*/);
+    assert.deepEqual(parse(many(symbol("a", dots)), "a..a.a"), ok(["a", "a", "a"]));
+    assert.equal(parse(symbol("a", dots), "a ").ok, false);
   });
 
   test("lazy builds its parser only once", () => {
