@@ -79,7 +79,7 @@ Errors report the **furthest position** any alternative reached, and **everythin
 
 Every exported function is referentially transparent: no exceptions, no shared mutable state, readonly results. A few combinators use loops or private mutable state inside, because JavaScript lacks tail-call elimination. That state never escapes a single call.
 
-Grammars are recursive descent, so very deeply nested input (hundreds of levels) can exhaust the JavaScript call stack.
+Grammars are recursive descent, so very deeply nested input can exhaust the JavaScript call stack. With Node's default stack, the bundled JSON example handles about 1,500 levels of nested arrays, and the calculator about 900 levels of parentheses.
 
 ## Development
 
