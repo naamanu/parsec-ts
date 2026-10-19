@@ -34,6 +34,20 @@ A `Parser<T, I = string>` is a plain function `(input: I, pos: number) => Result
 
 `parse(p, input)` runs `p` against the whole input and returns `{ ok: true, value }` or `{ ok: false, error }`. The `error` has `expected`, `found` (the character at the failure, or `"end of input"`), `pos`, `line` and `column`. `formatFailure` turns it into a readable message.
 
+### Pipeable style
+
+Every combinator has a data-last version in `parsec-ts/fp`, so parsers can be built with `pipe`, as in fp-ts or Effect:
+
+```ts
+import { pipe, regex, symbol } from "parsec-ts";
+import * as P from "parsec-ts/fp";
+
+const int = pipe(regex(/-?\d+/), P.map(Number), P.label("integer"), P.lexeme());
+const list = pipe(int, P.sepBy(symbol(",")), P.between(symbol("["), symbol("]")));
+```
+
+`P.map(f)(p)` is `map(p, f)`, and so on: each takes every argument except the parser being transformed. Combinators that only take a parser (`many`, `cut`, ...) are the same functions in both styles.
+
 ### Error messages
 
 Errors report the **furthest position** any alternative reached, and **everything that would have been accepted there**. That includes alternatives tried by `alt`, and the last attempt of `many` or `optional`. Use `label` to give a group of parsers a friendlier name.
