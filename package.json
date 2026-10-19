@@ -47,7 +47,8 @@
     "check:pack": "npm run build && node scripts/check-pack.ts",
     "docs": "typedoc",
     "prepublishOnly": "npm run typecheck && npm test && npm run check:pack",
-    "bench": "node bench/run.ts"
+    "bench": "node bench/run.ts",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 \"test/*.test.ts\""
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
