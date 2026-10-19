@@ -107,10 +107,21 @@ Grammars are recursive descent, so very deeply nested input can exhaust the Java
 Tests run TypeScript directly, which needs Node ≥ 22.18.
 
 ```sh
-npm test           # run tests
-npm run typecheck  # tsc --noEmit
-npm run build      # emit dist/
+npm test            # run tests
+npm run typecheck   # tsc --noEmit
+npm run build       # emit dist/
+npm run check:pack  # build, then verify the npm tarball contents
 ```
+
+### Releasing
+
+Publishing a GitHub release triggers `.github/workflows/release.yml`. The workflow publishes to npm through [trusted publishing](https://docs.npmjs.com/trusted-publishers), so no npm token is stored. npm adds provenance automatically, but only once the GitHub repo is public.
+
+1. Update `CHANGELOG.md`.
+2. `npm version <patch|minor|major>`, then `git push --follow-tags`.
+3. Create a GitHub release from the new `vX.Y.Z` tag. The workflow checks that the tag matches `package.json`.
+
+One-time setup: trusted publishers are configured in a package's settings on npmjs.com, so publish the first version by hand with `npm publish`. Then add a GitHub Actions trusted publisher for `naamanu/parsec-ts` with workflow `release.yml`. A new trusted-publisher configuration expires if it isn't used to publish within 2 days, so add it shortly before your next release.
 
 ## License
 
