@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 
 const allowed = [/^dist\/.+\.(js|d\.ts|js\.map)$/, /^(package\.json|README\.md|LICENSE)$/];
-const required = ["dist/index.js", "dist/index.d.ts", "package.json", "README.md", "LICENSE"];
+const required = ["dist/index.js", "dist/index.d.ts", "dist/fp.js", "dist/fp.d.ts", "package.json", "README.md", "LICENSE"];
 
 const [pack] = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json"], { encoding: "utf8" })) as [
   { files: { path: string }[]; size: number; unpackedSize: number },

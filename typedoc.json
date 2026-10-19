@@ -1,13 +1,24 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "entryPoints": ["src/index.ts"],
+  "entryPoints": [
+    "src/index.ts",
+    "src/fp.ts"
+  ],
   "tsconfig": "tsconfig.build.json",
   "out": "docs/api",
   "name": "parsec-ts",
   "readme": "README.md",
   "includeVersion": true,
   "excludePrivate": true,
-  "validation": { "notExported": true, "invalidLink": true, "notDocumented": true },
-  "requiredToBeDocumented": ["Function", "Variable", "TypeAlias"],
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": true
+  },
+  "requiredToBeDocumented": [
+    "Function",
+    "Variable",
+    "TypeAlias"
+  ],
   "treatValidationWarningsAsErrors": true
 }

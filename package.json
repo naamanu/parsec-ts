@@ -28,6 +28,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./fp": {
+      "types": "./dist/fp.d.ts",
+      "default": "./dist/fp.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
