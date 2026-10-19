@@ -202,6 +202,22 @@ For tokens, `found` defaults to the JSON of the token, and `column` to its index
 
 Lexemes skip whitespace *after* themselves, so start a grammar with `right(whitespace, p)` to allow leading whitespace.
 
+## Performance
+
+`npm run bench` parses JSON with the same grammar written in each library. Each uses regexes for string and number literals, so the numbers compare combinator overhead. Every output is checked against `JSON.parse` before timing. Median times on Node 24.19, Apple M5:
+
+| JSON parser | 45 kB | 1.15 MB |
+|---|---:|---:|
+| `JSON.parse` (native, for scale) | 0.08 ms | 2.2 ms |
+| **parsec-ts** | **1.3 ms** | **42 ms** |
+| parsec-ts `examples/json.ts` (char-level strings, `cut`, `context`) | 2.0 ms | 61 ms |
+| Parsimmon 1.18.1 | 3.1 ms | 91 ms |
+| Arcsecond 5.0.0 | 6,700 ms | — |
+
+Arcsecond 5's `regex` decodes the whole remaining input on every call, so regex-heavy grammars like this one take time quadratic in the input size. A grammar avoiding `regex` would fare much better. The benchmark leaves it out of the large document, where it takes minutes.
+
+Your numbers will differ by machine. Rerun the benchmark rather than relying on these.
+
 ## Purity
 
 Every exported function is referentially transparent: no exceptions, no shared mutable state, readonly results. A few combinators use loops or private mutable state inside, because JavaScript lacks tail-call elimination. That state never escapes a single call.
@@ -218,6 +234,7 @@ npm run typecheck   # tsc --noEmit
 npm run build       # emit dist/
 npm run check:pack  # build, then verify the npm tarball contents
 npm run docs        # API reference in docs/api (fails on undocumented exports)
+npm run bench       # JSON benchmark vs Parsimmon and Arcsecond
 ```
 
 ### Releasing

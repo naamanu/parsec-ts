@@ -46,11 +46,15 @@
     "test": "node --test \"test/*.test.ts\"",
     "check:pack": "npm run build && node scripts/check-pack.ts",
     "docs": "typedoc",
-    "prepublishOnly": "npm run typecheck && npm test && npm run check:pack"
+    "prepublishOnly": "npm run typecheck && npm test && npm run check:pack",
+    "bench": "node bench/run.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/parsimmon": "^1.10.9",
+    "arcsecond": "^5.0.0",
     "fast-check": "^4.10.2",
+    "parsimmon": "^1.18.1",
     "typedoc": "^0.28.20",
     "typescript": "^5.9.0"
   }
