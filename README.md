@@ -26,11 +26,11 @@ parse(expr, "1 x");
 // Parse error at line 1, column 3: unexpected "x", expected "*", "/", "+", "-" or end of input
 ```
 
-See [`examples/`](https://github.com/naamanu/parsec-ts/tree/main/examples) for a calculator and a complete JSON parser.
+See [`examples/`](https://github.com/naamanu/parsec-ts/tree/main/examples) for a calculator, a complete JSON parser, and a two-stage lexer + token parser.
 
 ## Concepts
 
-A `Parser<T>` is a plain function `(input: string, pos: number) => Result<T>`. You can write your own parsers directly, and they compose with the built-in ones.
+A `Parser<T, I = string>` is a plain function `(input: I, pos: number) => Result<T>`. You can write your own parsers directly, and they compose with the built-in ones. `ParserValue<typeof p>` gives a parser's value type.
 
 `parse(p, input)` runs `p` against the whole input and returns `{ ok: true, value }` or `{ ok: false, error }`. The `error` has `expected`, `found` (the character at the failure, or `"end of input"`), `pos`, `line` and `column`. `formatFailure` turns it into a readable message.
 
@@ -53,6 +53,19 @@ parse(alt(letStmt, exprStmt), "let 1");
 
 `attempt(p)` undoes `cut` inside `p`, turning its fatal failures back into ordinary ones.
 
+### Non-string input
+
+Parsers can read any array-like input as well as strings: an array of tokens from a separate lexer, or a `Uint8Array` of bytes. The combinators are generic over the input type. `succeed`, `fail`, `eof` and `position` work with every input. `satisfyToken`, `anyToken` and `matchToken` match single elements:
+
+```ts
+type Tok = { kind: "num" | "plus"; text: string };
+const num = map(satisfyToken((t: Tok) => t.kind === "num", "number"), (t) => Number(t.text));
+const plus = satisfyToken((t: Tok) => t.kind === "plus", '"+"');
+parse(sepBy1(num, plus), tokens); // Parser<readonly number[], ArrayLike<Tok>>
+```
+
+For tokens, `found` defaults to the JSON of the token, and `column` to its index + 1. Bytes are shown as hex. Pass `describe` and `locate` to `parse` to customise both. For example, map a token back to its line and column in the original source, as [`examples/tokens.ts`](https://github.com/naamanu/parsec-ts/tree/main/examples/tokens.ts) does.
+
 ## API
 
 | Primitive | |
@@ -66,6 +79,17 @@ parse(alt(letStmt, exprStmt), "let 1");
 | `position` | the current offset, consuming nothing |
 | `succeed(v)` | consume nothing, return `v` |
 | `fail(expected)` | consume nothing, fail |
+
+| Token primitive (arrays, `Uint8Array`) | |
+|---|---|
+| `satisfyToken(pred, name)` | match one element satisfying `pred` |
+| `anyToken<Tok>()` | match any one element |
+| `matchToken(value, name?)` | match one element `=== value` |
+
+| Running | |
+|---|---|
+| `parse(p, input, { describe?, locate? })` | run `p` on the whole input; failures are values |
+| `formatFailure(error)` | render a failure as a one-line message |
 
 | Combinator | |
 |---|---|
