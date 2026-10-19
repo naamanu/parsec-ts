@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  alt, anyChar, between, chain, chainl1, chainr1, eof, fail, formatFailure, label, lazy, left, lookahead, many, many1,
+  alt, anyChar, attempt, between, chain, chainl1, chainr1, cut, eof, fail, formatFailure, label, lazy, left, lookahead, many, many1,
   count, lexeme, manyTill, map, noneOf, not, oneOf, optional, parse, position, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str,
   struct, succeed, symbol, whitespace, withSpan,
   type Parser, type ParseResult,
@@ -178,6 +178,46 @@ describe("combinators", () => {
     parse(many(p), "aaa");
     parse(many(p), "aaa");
     assert.equal(calls, 1);
+  });
+});
+
+describe("cut", () => {
+  const ident = regex(/[a-z]+/, "identifier");
+  const exprStmt = map(regex(/[a-z0-9 ]+/), (e) => ({ expr: e }));
+  const letStmt = (commit: boolean) =>
+    map(right(symbol("let"), commit ? cut(ident) : ident), (name) => ({ let: name }));
+
+  test("without cut, a later alternative can misread the input", () => {
+    assert.deepEqual(parse(alt(letStmt(false), exprStmt), "let 1"), ok({ expr: "let 1" }));
+  });
+
+  test("with cut, alt reports the committed failure", () => {
+    const e = failed(parse(alt(letStmt(true), exprStmt), "let 1"));
+    assert.deepEqual([e.column, e.expected], [5, ["identifier"]]);
+  });
+
+  test("fatal failures propagate through many, optional and sepBy", () => {
+    // Without cut, each loop would stop before the broken "[x" and the
+    // catch-all `rest` would swallow it. With cut, the failure surfaces.
+    const item = right(str("["), cut(str("]")));
+    const rest = regex(/.*/);
+    const cases: [Parser<unknown>, string, number][] = [
+      [left(many(item), rest), "[][x", 3],
+      [left(optional(item), rest), "[x", 1],
+      [left(sepBy(item, str(",")), rest), "[],[x", 4],
+    ];
+    for (const [p, input, pos] of cases) {
+      const e = failed(parse(p, input));
+      assert.deepEqual([e.pos, e.expected], [pos, ['"]"']], input);
+    }
+  });
+
+  test("attempt restores backtracking", () => {
+    assert.deepEqual(parse(alt(attempt(letStmt(true)), exprStmt), "let 1"), ok({ expr: "let 1" }));
+  });
+
+  test("not treats a fatal failure as failure", () => {
+    assert.deepEqual(parse(right(not(cut(str("a"))), anyChar), "b"), ok("b"));
   });
 });
 

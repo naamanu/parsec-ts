@@ -19,7 +19,9 @@ export type Failure = { readonly pos: number; readonly expected: readonly string
  */
 export type Result<T> =
   | { readonly ok: true; readonly value: T; readonly pos: number; readonly failure?: Failure }
-  | { readonly ok: false; readonly failure: Failure };
+  | { readonly ok: false; readonly failure: Failure; readonly fatal?: true };
+
+type Failed = Extract<Result<never>, { ok: false }>;
 
 /** A parser is a pure function from (input, position) to a Result. */
 export type Parser<T> = (input: string, pos: number) => Result<T>;
@@ -46,6 +48,10 @@ const success = <T>(value: T, pos: number, failure?: Failure): Result<T> =>
 
 const failure = (expected: readonly string[], pos: number): Result<never> =>
   ({ ok: false, failure: { pos, expected } });
+
+/** A failure with new details that keeps `r`'s fatality (see `cut`). */
+const failWith = (r: Failed, failure: Failure): Failed =>
+  r.fatal ? { ok: false, failure, fatal: true } : { ok: false, failure };
 
 /** Keep the furthest failure; at the same position, combine what was expected. */
 function merge(a: Failure | undefined, b: Failure): Failure;
@@ -130,7 +136,7 @@ export const chain = <A, B>(p: Parser<A>, f: (a: A) => Parser<B>): Parser<B> => 
   const r = p(input, pos);
   if (!r.ok) return r;
   const q = f(r.value)(input, r.pos);
-  return q.ok ? success(q.value, q.pos, merge(r.failure, q.failure)) : { ok: false, failure: merge(r.failure, q.failure) };
+  return q.ok ? success(q.value, q.pos, merge(r.failure, q.failure)) : failWith(q, merge(r.failure, q.failure));
 };
 
 type Values<Ps extends readonly Parser<any>[]> = {
@@ -144,7 +150,7 @@ export const seq = <Ps extends readonly Parser<any>[]>(...ps: Ps): Parser<Values
   let fail: Failure | undefined;
   for (const p of ps) {
     const r = p(input, pos);
-    if (!r.ok) return { ok: false, failure: merge(fail, r.failure) };
+    if (!r.ok) return failWith(r, merge(fail, r.failure));
     fail = merge(fail, r.failure);
     values.push(r.value);
     pos = r.pos;
@@ -161,7 +167,7 @@ export const left = <A>(a: Parser<A>, b: Parser<unknown>): Parser<A> => (input, 
   const ra = a(input, pos);
   if (!ra.ok) return ra;
   const rb = b(input, ra.pos);
-  if (!rb.ok) return { ok: false, failure: merge(ra.failure, rb.failure) };
+  if (!rb.ok) return failWith(rb, merge(ra.failure, rb.failure));
   return success(ra.value, rb.pos, merge(ra.failure, rb.failure));
 };
 
@@ -170,7 +176,7 @@ export const right = <B>(a: Parser<unknown>, b: Parser<B>): Parser<B> => (input,
   const ra = a(input, pos);
   if (!ra.ok) return ra;
   const rb = b(input, ra.pos);
-  if (!rb.ok) return { ok: false, failure: merge(ra.failure, rb.failure) };
+  if (!rb.ok) return failWith(rb, merge(ra.failure, rb.failure));
   return success(rb.value, rb.pos, merge(ra.failure, rb.failure));
 };
 
@@ -179,14 +185,17 @@ export const between = <T>(open: Parser<unknown>, p: Parser<T>, close: Parser<un
     const ro = open(input, pos);
     if (!ro.ok) return ro;
     const rp = p(input, ro.pos);
-    if (!rp.ok) return { ok: false, failure: merge(ro.failure, rp.failure) };
+    if (!rp.ok) return failWith(rp, merge(ro.failure, rp.failure));
     const fail = merge(ro.failure, rp.failure);
     const rc = close(input, rp.pos);
-    if (!rc.ok) return { ok: false, failure: merge(fail, rc.failure) };
+    if (!rc.ok) return failWith(rc, merge(fail, rc.failure));
     return success(rp.value, rc.pos, merge(fail, rc.failure));
   };
 
-/** Ordered choice with backtracking. Failures of every tried alternative are merged. */
+/**
+ * Ordered choice with backtracking. Failures of every tried alternative are
+ * merged. A fatal failure (see `cut`) stops the search immediately.
+ */
 export const alt = <Ts extends readonly unknown[]>(
   ...ps: { [K in keyof Ts]: Parser<Ts[K]> }
 ): Parser<Ts[number]> => (input, pos) => {
@@ -195,6 +204,7 @@ export const alt = <Ts extends readonly unknown[]>(
     const r = p(input, pos);
     fail = merge(fail, r.failure);
     if (r.ok) return success(r.value, r.pos, fail);
+    if (r.fatal) return failWith(r, merge(fail, r.failure));
   }
   return { ok: false, failure: fail ?? { pos, expected: [] } };
 };
@@ -206,8 +216,25 @@ export const alt = <Ts extends readonly unknown[]>(
 export const label = <T>(p: Parser<T>, name: string): Parser<T> => (input, pos) => {
   const relabel = (f: Failure): Failure => (f.pos === pos ? { pos, expected: [name] } : f);
   const r = p(input, pos);
-  if (!r.ok) return { ok: false, failure: relabel(r.failure) };
+  if (!r.ok) return failWith(r, relabel(r.failure));
   return success(r.value, r.pos, r.failure && relabel(r.failure));
+};
+
+/**
+ * Commit to `p`: if it fails, the failure is fatal, so enclosing `alt`,
+ * `many`, `optional`, `sepBy`, etc. propagate it rather than backtracking.
+ * Place it after the part of a grammar that identifies a construct, e.g.
+ * `right(keyword("let"), cut(binding))`.
+ */
+export const cut = <T>(p: Parser<T>): Parser<T> => (input, pos) => {
+  const r = p(input, pos);
+  return r.ok || r.fatal ? r : { ok: false, failure: r.failure, fatal: true };
+};
+
+/** Undo `cut` inside `p`: its fatal failures become ordinary, backtrackable ones. */
+export const attempt = <T>(p: Parser<T>): Parser<T> => (input, pos) => {
+  const r = p(input, pos);
+  return r.ok || !r.fatal ? r : { ok: false, failure: r.failure };
 };
 
 /** Run `p` without consuming input. */
@@ -216,7 +243,10 @@ export const lookahead = <T>(p: Parser<T>): Parser<T> => (input, pos) => {
   return r.ok ? success(r.value, pos) : r;
 };
 
-/** Succeed without consuming input when `p` fails; fail with `expected` when it succeeds. */
+/**
+ * Succeed without consuming input when `p` fails (fatally or not); fail with
+ * `expected` when it succeeds.
+ */
 export const not = (p: Parser<unknown>, expected = "something else"): Parser<null> => (input, pos) =>
   p(input, pos).ok ? failure([expected], pos) : success(null, pos);
 
@@ -231,6 +261,7 @@ export const many = <T>(p: Parser<T>): Parser<readonly T[]> => (input, start) =>
   for (;;) {
     const r = p(input, pos);
     fail = merge(fail, r.failure);
+    if (!r.ok && r.fatal) return failWith(r, merge(fail, r.failure));
     if (!r.ok || r.pos === pos) return success(values, pos, fail);
     values.push(r.value);
     pos = r.pos;
@@ -257,8 +288,9 @@ export const manyTill = <T>(p: Parser<T>, end: Parser<unknown>): Parser<readonly
     const e = end(input, pos);
     fail = merge(fail, e.failure);
     if (e.ok) return success(values, e.pos, fail);
+    if (e.fatal) return failWith(e, merge(fail, e.failure));
     const r = p(input, pos);
-    if (!r.ok) return { ok: false, failure: merge(fail, r.failure) };
+    if (!r.ok) return failWith(r, merge(fail, r.failure));
     if (r.pos === pos) return { ok: false, failure: merge(fail, e.failure) }; // no progress: report what `end` wanted
     fail = merge(fail, r.failure);
     values.push(r.value);
@@ -272,7 +304,7 @@ export function optional<T, D>(p: Parser<T>, fallback: D): Parser<T | D>;
 export function optional<T, D>(p: Parser<T>, fallback: D | null = null): Parser<T | D | null> {
   return (input, pos) => {
     const r = p(input, pos);
-    return r.ok ? r : success(fallback, pos, r.failure);
+    return r.ok || r.fatal ? r : success(fallback, pos, r.failure);
   };
 }
 
@@ -283,7 +315,7 @@ export const count = <T>(n: number, p: Parser<T>): Parser<readonly T[]> => (inpu
   let fail: Failure | undefined;
   for (let i = 0; i < n; i++) {
     const r = p(input, pos);
-    if (!r.ok) return { ok: false, failure: merge(fail, r.failure) };
+    if (!r.ok) return failWith(r, merge(fail, r.failure));
     fail = merge(fail, r.failure);
     values.push(r.value);
     pos = r.pos;
@@ -307,7 +339,7 @@ export const struct = <S extends Readonly<Record<string, Parser<any>>>>(shape: S
     let fail: Failure | undefined;
     for (const [key, p] of fields) {
       const r = p(input, pos);
-      if (!r.ok) return { ok: false, failure: merge(fail, r.failure) };
+      if (!r.ok) return failWith(r, merge(fail, r.failure));
       fail = merge(fail, r.failure);
       entries.push([key, r.value]);
       pos = r.pos;
@@ -316,7 +348,7 @@ export const struct = <S extends Readonly<Record<string, Parser<any>>>>(shape: S
   };
 };
 
-type Separated<T, S> = { values: T[]; seps: S[]; pos: number; fail: Failure | undefined };
+type Separated<T, S> = { ok: true; values: T[]; seps: S[]; pos: number; fail: Failure | undefined } | Failed;
 
 /**
  * Continue `item (sep item)*` after a first item has already been parsed.
@@ -333,11 +365,11 @@ const separated = <T, S>(
   for (;;) {
     const s = sep(input, pos);
     fail = merge(fail, s.failure);
-    if (!s.ok) return { values, seps, pos, fail };
+    if (!s.ok) return s.fatal ? failWith(s, merge(fail, s.failure)) : { ok: true, values, seps, pos, fail };
     const r = item(input, s.pos);
     fail = merge(fail, r.failure);
-    if (!r.ok) return { values, seps, pos: trailing ? s.pos : pos, fail };
-    if (r.pos === pos) return { values, seps, pos, fail }; // no progress
+    if (!r.ok) return r.fatal ? failWith(r, merge(fail, r.failure)) : { ok: true, values, seps, pos: trailing ? s.pos : pos, fail };
+    if (r.pos === pos) return { ok: true, values, seps, pos, fail }; // no progress
     values.push(r.value);
     seps.push(s.value);
     pos = r.pos;
@@ -347,9 +379,9 @@ const separated = <T, S>(
 const sepList = <T>(p: Parser<T>, sep: Parser<unknown>, allowEmpty: boolean, trailing: boolean): Parser<readonly T[]> =>
   (input, pos) => {
     const r = p(input, pos);
-    if (!r.ok) return allowEmpty ? success([], pos, r.failure) : r;
+    if (!r.ok) return allowEmpty && !r.fatal ? success([], pos, r.failure) : r;
     const s = separated(p, sep, trailing, input, r.value, r.pos, r.failure);
-    return success(s.values, s.pos, s.fail);
+    return s.ok ? success(s.values, s.pos, s.fail) : s;
   };
 
 export const sepBy1 = <T>(p: Parser<T>, sep: Parser<unknown>): Parser<readonly T[]> => sepList(p, sep, false, false);
@@ -372,7 +404,9 @@ export const lazy = <T>(f: () => Parser<T>): Parser<T> => {
 export const chainl1 = <T>(term: Parser<T>, op: Parser<(a: T, b: T) => T>): Parser<T> => (input, pos) => {
   const r = term(input, pos);
   if (!r.ok) return r;
-  const { values, seps, pos: end, fail } = separated(term, op, false, input, r.value, r.pos, r.failure);
+  const s = separated(term, op, false, input, r.value, r.pos, r.failure);
+  if (!s.ok) return s;
+  const { values, seps, pos: end, fail } = s;
   return success(values.slice(1).reduce((acc, v, i) => seps[i]!(acc, v), values[0]!), end, fail);
 };
 
@@ -380,7 +414,9 @@ export const chainl1 = <T>(term: Parser<T>, op: Parser<(a: T, b: T) => T>): Pars
 export const chainr1 = <T>(term: Parser<T>, op: Parser<(a: T, b: T) => T>): Parser<T> => (input, pos) => {
   const r = term(input, pos);
   if (!r.ok) return r;
-  const { values, seps, pos: end, fail } = separated(term, op, false, input, r.value, r.pos, r.failure);
+  const s = separated(term, op, false, input, r.value, r.pos, r.failure);
+  if (!s.ok) return s;
+  const { values, seps, pos: end, fail } = s;
   const last = values[values.length - 1]!;
   return success(values.slice(0, -1).reduceRight((acc, v, i) => seps[i]!(v, acc), last), end, fail);
 };

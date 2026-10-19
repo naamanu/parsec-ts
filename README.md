@@ -40,7 +40,18 @@ Errors report the **furthest position** any alternative reached, and **everythin
 
 ### Backtracking
 
-`alt` always backtracks: if an alternative fails after consuming input, the next one is tried from the original position. No `attempt`/`try` is needed.
+By default `alt` backtracks: if an alternative fails after consuming input, the next one is tried from the original position.
+
+Use `cut(p)` to commit. Once a grammar has seen enough to know which construct it's in, wrap the rest in `cut`. Any failure inside is then **fatal**: `alt`, `many`, `optional`, `sepBy` and the other combinators pass it straight up rather than trying something else. That keeps a later alternative from silently misreading broken input, and it skips backtracking that can't succeed:
+
+```ts
+const letStmt = right(symbol("let"), cut(ident));
+parse(alt(letStmt, exprStmt), "let 1");
+// without cut: exprStmt may happily accept "let 1"
+// with cut:    unexpected "1", expected identifier
+```
+
+`attempt(p)` undoes `cut` inside `p`, turning its fatal failures back into ordinary ones.
 
 ## API
 
@@ -64,6 +75,7 @@ Errors report the **furthest position** any alternative reached, and **everythin
 | `left(a, b)` / `right(a, b)` | run both, keep one value |
 | `between(open, p, close)` | keep the middle value |
 | `alt(...ps)` | ordered choice with backtracking |
+| `cut(p)` / `attempt(p)` | make failures in `p` fatal / recoverable again |
 | `struct({ key: p, ... })` | run in key order, returning a typed object |
 | `optional(p, fallback?)` | `p`, or `fallback` (default `null`) |
 | `many(p)` / `many1(p)` | zero / one or more |
