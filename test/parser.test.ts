@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   alt, anyChar, attempt, between, chain, chainl1, chainr1, cut, eof, fail, formatFailure, label, lazy, left, lookahead, many, many1,
   count, lexeme, manyTill, map, noneOf, not, oneOf, optional, parse, position, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str,
-  struct, succeed, symbol, whitespace, withSpan, anyToken, matchToken, satisfyToken,
+  struct, succeed, symbol, whitespace, withSpan, anyToken, matchToken, satisfyToken, operators,
   type Parser, type ParseResult,
 } from "../src/index.ts";
 import { calc } from "../examples/calc.ts";
@@ -265,6 +265,45 @@ describe("errors", () => {
   });
 });
 
+describe("operators", () => {
+  // A tiny grammar over single digits that builds strings, so the parse
+  // tree shape is visible in the result.
+  const atom = map(digit, (d) => d);
+  const bin = (c: string) => map(str(c), () => (a: string, b: string) => `(${a}${c}${b})`);
+  const pre = (c: string) => map(str(c), () => (a: string) => `(${c}${a})`);
+  const post = (c: string) => map(str(c), () => (a: string) => `(${a}${c})`);
+  const expr = operators(atom, [
+    { postfix: [post("!")] },
+    { prefix: [pre("-"), pre("~")] },
+    { infix: "right", ops: [bin("^")] },
+    { infix: "left", ops: [bin("*"), bin("/")] },
+    { infix: "left", ops: [bin("+"), bin("-")] },
+  ]);
+
+  test("precedence and associativity follow the table", () => {
+    assert.deepEqual(parse(expr, "1+2*3"), ok("(1+(2*3))"));
+    assert.deepEqual(parse(expr, "1-2-3"), ok("((1-2)-3)"));
+    assert.deepEqual(parse(expr, "1^2^3"), ok("(1^(2^3))"));
+    assert.deepEqual(parse(expr, "1*2^3+4"), ok("((1*(2^3))+4)"));
+  });
+
+  test("prefix and postfix operators repeat, innermost first", () => {
+    assert.deepEqual(parse(expr, "-~1"), ok("(-(~1))"));
+    assert.deepEqual(parse(expr, "1!!"), ok("((1!)!)"));
+    assert.deepEqual(parse(expr, "-1!"), ok("(-(1!))"));
+    assert.deepEqual(parse(expr, "1--2"), ok("(1-(-2))"));
+  });
+
+  test("errors list operators from every level", () => {
+    assert.deepEqual(failed(parse(expr, "1?")).expected, ['"!"', '"^"', '"*"', '"/"', '"+"', '"-"', "end of input"]);
+    assert.deepEqual(failed(parse(expr, "1+")).expected, ['"-"', '"~"', "digit"]);
+  });
+
+  test("an empty table is just the atom", () => {
+    assert.deepEqual(parse(operators(atom, []), "7"), ok("7"));
+  });
+});
+
 describe("non-string input", () => {
   type Tok = { kind: "num" | "plus"; text: string };
   const n = (text: string): Tok => ({ kind: "num", text });
@@ -328,7 +367,14 @@ describe("calculator example", () => {
       formatFailure(failed(calc("1 x"))),
       'Parse error at line 1, column 3: unexpected "x", expected "^", "*", "/", "+", "-" or end of input',
     );
-    assert.equal(formatFailure(failed(calc("1 +"))), 'Parse error at line 1, column 4: unexpected end of input, expected number or "("');
+    assert.equal(formatFailure(failed(calc("1 +"))), 'Parse error at line 1, column 4: unexpected end of input, expected "-", number or "("');
+  });
+
+  test("unary minus binds looser than ^", () => {
+    assert.deepEqual(calc("-2 ^ 2"), ok(-4));
+    assert.deepEqual(calc("2 - -3"), ok(5));
+    assert.deepEqual(calc("--4"), ok(4));
+    assert.deepEqual(calc("-(1 + 2) * 3"), ok(-9));
   });
 });
 

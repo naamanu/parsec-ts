@@ -104,17 +104,20 @@ describe("examples", () => {
     }));
   });
 
-  type Expr = number | { op: "+" | "-" | "*" | "/" | "^"; l: Expr; r: Expr };
+  type Expr = number | { neg: Expr } | { op: "+" | "-" | "*" | "/" | "^"; l: Expr; r: Expr };
   const expr: fc.Arbitrary<Expr> = fc.letrec<{ e: Expr }>((tie) => ({
     e: fc.oneof(
       { depthSize: "small", withCrossShrink: true },
       fc.integer({ min: 0, max: 99 }),
+      fc.record({ neg: tie("e") }),
       fc.record({ op: fc.constantFrom("+", "-", "*", "/", "^"), l: tie("e"), r: tie("e") }),
     ),
   })).e;
-  const show = (e: Expr): string => (typeof e === "number" ? String(e) : `(${show(e.l)} ${e.op} ${show(e.r)})`);
+  const show = (e: Expr): string =>
+    typeof e === "number" ? String(e) : "neg" in e ? `(-${show(e.neg)})` : `(${show(e.l)} ${e.op} ${show(e.r)})`;
   const evaluate = (e: Expr): number => {
     if (typeof e === "number") return e;
+    if ("neg" in e) return -evaluate(e.neg);
     const [l, r] = [evaluate(e.l), evaluate(e.r)];
     return { "+": l + r, "-": l - r, "*": l * r, "/": l / r, "^": l ** r }[e.op];
   };

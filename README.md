@@ -53,6 +53,21 @@ parse(alt(letStmt, exprStmt), "let 1");
 
 `attempt(p)` undoes `cut` inside `p`, turning its fatal failures back into ordinary ones.
 
+### Operator precedence
+
+`operators(atom, table)` builds an expression parser from a table of levels, ordered from highest precedence to lowest. Each level is left- or right-associative infix, prefix, or postfix:
+
+```ts
+const expr: Parser<number> = lazy(() => operators(atom, [
+  { infix: "right", ops: [binary("^", (a, b) => a ** b)] },
+  { prefix: [unary("-", (a) => -a)] },
+  { infix: "left", ops: [binary("*", (a, b) => a * b), binary("/", (a, b) => a / b)] },
+  { infix: "left", ops: [binary("+", (a, b) => a + b), binary("-", (a, b) => a - b)] },
+]));
+```
+
+Each operator parser returns the function to apply, e.g. `const binary = (s, f) => map(symbol(s), () => f)`. See [`examples/calc.ts`](https://github.com/naamanu/parsec-ts/tree/main/examples/calc.ts).
+
 ### Non-string input
 
 Parsers can read any array-like input as well as strings: an array of tokens from a separate lexer, or a `Uint8Array` of bytes. The combinators are generic over the input type. `succeed`, `fail`, `eof` and `position` work with every input. `satisfyToken`, `anyToken` and `matchToken` match single elements:
@@ -107,6 +122,7 @@ For tokens, `found` defaults to the JSON of the token, and `column` to its index
 | `manyTill(p, end)` | repeat `p` until `end` |
 | `sepBy(p, sep)` / `sepBy1` / `sepEndBy` | separated lists |
 | `chainl1(term, op)` / `chainr1` | left / right-associative operators |
+| `operators(atom, table)` | expression parser from a precedence table (infix, prefix, postfix) |
 | `lookahead(p)` / `not(p, expected?)` | zero-width checks |
 | `label(p, name)` | rename what `p` reports as expected |
 | `withSpan(p)` | `{ value, start, end }`: the value plus the input range it came from |
@@ -124,7 +140,7 @@ Lexemes skip whitespace *after* themselves, so start a grammar with `right(white
 
 Every exported function is referentially transparent: no exceptions, no shared mutable state, readonly results. A few combinators use loops or private mutable state inside, because JavaScript lacks tail-call elimination. That state never escapes a single call.
 
-Grammars are recursive descent, so very deeply nested input can exhaust the JavaScript call stack. With Node's default stack, the bundled JSON example handles about 1,500 levels of nested arrays, and the calculator about 900 levels of parentheses.
+Grammars are recursive descent, so very deeply nested input can exhaust the JavaScript call stack. With Node's default stack, the bundled JSON example handles about 1,500 levels of nested arrays, and the calculator about 800 levels of parentheses.
 
 ## Development
 
