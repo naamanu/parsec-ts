@@ -29,8 +29,11 @@ export type ParseFailure = {
   readonly expected: readonly string[];
   /** What was actually at `pos`: a quoted character, or "end of input". */
   readonly found: string;
+  /** Offset in UTF-16 code units, as used by `input.slice`. */
   readonly pos: number;
+  /** 1-based; `\n`, `\r\n` and `\r` each end a line. */
   readonly line: number;
+  /** 1-based, counted in Unicode code points so an emoji is one column. */
   readonly column: number;
 };
 
@@ -396,8 +399,8 @@ export const symbol = (s: string, ws: Parser<unknown> = whitespace): Parser<stri
 // Running
 
 const locate = (input: string, pos: number): { line: number; column: number } => {
-  const lines = input.slice(0, pos).split("\n");
-  return { line: lines.length, column: lines[lines.length - 1]!.length + 1 };
+  const lines = input.slice(0, pos).split(/\r\n|\r|\n/);
+  return { line: lines.length, column: [...lines[lines.length - 1]!].length + 1 };
 };
 
 const describeAt = (input: string, pos: number): string => {
