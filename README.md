@@ -8,6 +8,8 @@ deno add jsr:@naamanu/parsec-ts      # Deno, via JSR
 npx jsr add @naamanu/parsec-ts       # or JSR from Node
 ```
 
+**[API reference](https://nanamanu.com/parsec-ts/)**
+
 ## Quick start
 
 ```ts
@@ -245,7 +247,7 @@ npm run coverage    # run tests; fail below 100% line, branch or function covera
 npm run typecheck   # tsc --noEmit
 npm run build       # emit dist/
 npm run check:pack  # build, then verify the npm tarball contents
-npm run docs        # API reference in docs/api (fails on undocumented exports)
+npm run docs        # API reference in docs/api (fails on undocumented exports); deployed to Pages from main
 npm run bench       # JSON benchmark vs Parsimmon and Arcsecond
 ```
 
