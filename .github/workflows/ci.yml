@@ -20,6 +20,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run coverage
       - run: npm run check:pack
+      - run: npm run check:jsr
       - run: npm run docs
       - uses: actions/upload-artifact@v5
         if: matrix.node == '24.x'

@@ -3,7 +3,9 @@
 A tiny, purely functional parser combinator library for TypeScript. Zero dependencies, fully typed, and failures are values, not exceptions.
 
 ```sh
-npm install parsec-ts
+npm install parsec-ts                # npm
+deno add jsr:@naamanu/parsec-ts      # Deno, via JSR
+npx jsr add @naamanu/parsec-ts       # or JSR from Node
 ```
 
 ## Quick start
@@ -252,10 +254,10 @@ npm run bench       # JSON benchmark vs Parsimmon and Arcsecond
 Publishing a GitHub release triggers `.github/workflows/release.yml`. The workflow publishes to npm through [trusted publishing](https://docs.npmjs.com/trusted-publishers), so no npm token is stored. npm adds provenance automatically, but only once the GitHub repo is public.
 
 1. Update `CHANGELOG.md`.
-2. `npm version <patch|minor|major>`, then `git push --follow-tags`.
-3. Create a GitHub release from the new `vX.Y.Z` tag. The workflow checks that the tag matches `package.json`.
+2. `npm version <patch|minor|major>` (this also updates `jsr.json`), then `git push --follow-tags`.
+3. Create a GitHub release from the new `vX.Y.Z` tag. The workflow checks that the tag matches `package.json`, then publishes to npm and JSR.
 
-One-time setup: trusted publishers are configured in a package's settings on npmjs.com, so publish the first version by hand with `npm publish`. Then add a GitHub Actions trusted publisher for `naamanu/parsec-ts` with workflow `release.yml`. A new trusted-publisher configuration expires if it isn't used to publish within 2 days, so add it shortly before your next release.
+One-time setup: trusted publishers are configured in a package's settings on npmjs.com, so publish the first version by hand with `npm publish`. Then add a GitHub Actions trusted publisher for `naamanu/parsec-ts` with workflow `release.yml`. For JSR, create the `@naamanu` scope and the `parsec-ts` package on jsr.io, and link it to this GitHub repository in the package settings. A new trusted-publisher configuration expires if it isn't used to publish within 2 days, so add it shortly before your next release.
 
 ## License
 
