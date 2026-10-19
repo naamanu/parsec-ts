@@ -208,6 +208,16 @@ describe("errors", () => {
     assert.equal(formatFailure(failed(parse(alt(), "z"))), "Parse error at line 1, column 1: unexpected \"z\"");
   });
 
+  test("columns count code points; lines end at \\n, \\r\\n or \\r", () => {
+    const at = (input: string) => {
+      const { line, column, pos } = failed(parse(many(noneOf("!")), input));
+      return { line, column, pos };
+    };
+    assert.deepEqual(at("😀😀!"), { line: 1, column: 3, pos: 4 });
+    assert.deepEqual(at("a\r\nb!"), { line: 2, column: 2, pos: 4 });
+    assert.deepEqual(at("a\rb\nc!"), { line: 3, column: 2, pos: 5 });
+  });
+
   test("formatFailure reports line, column and alternatives", () => {
     const e = failed(parse(seq(str("a\n"), alt(str("b"), str("c"), str("d"))), "a\nx"));
     assert.equal(formatFailure(e), 'Parse error at line 2, column 1: unexpected "x", expected "b", "c" or "d"');
