@@ -1,5 +1,5 @@
 import {
-  alt, between, label, lazy, left, lexeme, many, map, parse, regex, right, satisfy, sepBy, seq, str, symbol,
+  alt, between, cut, label, lazy, left, lexeme, many, map, parse, regex, right, satisfy, sepBy, seq, str, symbol,
   type Parser, type ParseResult,
 } from "../src/index.ts";
 
@@ -37,10 +37,12 @@ const value: Parser<Json> = lazy(() =>
   alt(object, array, string, number, keyword("true", true), keyword("false", false), keyword("null", null)),
 );
 
-const array: Parser<readonly Json[]> = between(sym("["), sepBy(value, sym(",")), sym("]"));
+// After "[" or "{" nothing else can match, so `cut` commits: a failure inside
+// is reported as-is, with no backtracking into other alternatives.
+const array: Parser<readonly Json[]> = between(sym("["), cut(sepBy(value, sym(","))), cut(sym("]")));
 
 const object: Parser<{ readonly [key: string]: Json }> = map(
-  between(sym("{"), sepBy(seq(left(string, sym(":")), value), sym(",")), sym("}")),
+  between(sym("{"), cut(sepBy(seq(left(string, sym(":")), value), sym(","))), cut(sym("}"))),
   (pairs) => Object.fromEntries(pairs),
 );
 
