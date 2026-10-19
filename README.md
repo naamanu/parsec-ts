@@ -230,6 +230,7 @@ Tests run TypeScript directly, which needs Node ≥ 22.18.
 
 ```sh
 npm test            # run tests
+npm run coverage    # run tests; fail below 100% line, branch or function coverage of src/
 npm run typecheck   # tsc --noEmit
 npm run build       # emit dist/
 npm run check:pack  # build, then verify the npm tarball contents

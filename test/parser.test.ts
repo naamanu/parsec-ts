@@ -373,6 +373,63 @@ describe("tracing", () => {
   });
 });
 
+describe("edge cases", () => {
+  // `[` commits: a broken bracket fails fatally.
+  const item = right(str("["), cut(str("]")));
+  const isFatal = (p: Parser<unknown>, s: string) => {
+    const r = p(s, 0);
+    return !r.ok && r.fatal === true;
+  };
+
+  test("fatal failures propagate through every repeating combinator", () => {
+    assert.ok(isFatal(many1(item), "[][x"));
+    assert.ok(isFatal(manyTill(anyChar, item), "ab[x"));
+    assert.ok(isFatal(sepBy(digit, item), "1[x"));
+    const n = map(digit, Number);
+    const fatalOp = map(right(str("["), cut(str("]"))), () => (a: number, b: number) => a + b);
+    assert.ok(isFatal(chainl1(n, fatalOp), "1[x"));
+    assert.ok(isFatal(chainr1(n, fatalOp), "1[x"));
+    assert.ok(isFatal(operators(n, [{ prefix: [map(item, () => (a: number) => a)] }]), "[x"));
+    assert.ok(isFatal(operators(n, [{ postfix: [map(item, () => (a: number) => a)] }]), "1[x"));
+  });
+
+  test("between reports a failure in the middle", () => {
+    assert.deepEqual(failed(parse(between(str("("), digit, str(")")), "(x)")).expected, ["digit"]);
+  });
+
+  test("attempt and lookahead pass other results through", () => {
+    assert.deepEqual(parse(attempt(digit), "1"), ok("1"));
+    assert.deepEqual(failed(parse(attempt(digit), "x")).expected, ["digit"]);
+    assert.deepEqual(failed(parse(lookahead(digit), "x")).expected, ["digit"]);
+  });
+
+  test("loops stop when nothing is consumed", () => {
+    // manyTill: `p` succeeds without consuming, so it reports what `end` wanted.
+    assert.deepEqual(failed(parse(manyTill(succeed(1), str(";")), "x")).expected, ['";"']);
+    // sepBy: zero-width separator and item stop the loop.
+    assert.deepEqual(parse(sepBy(optional(digit), succeed(null)), "1"), ok(["1"]));
+  });
+
+  test("merging prefers the longer context", () => {
+    const inner = context("inner", context("outer", seq(str("a"), str("b"))));
+    const shallow = context("shallow", seq(str("a"), str("c")));
+    assert.deepEqual(failed(parse(alt(shallow, inner), "ax")).context, ["outer", "inner"]);
+  });
+
+  test("tokens that can't be shown as JSON fall back to String", () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    assert.equal(failed(parse(eof, [cyclic])).found, "[object Object]");
+    assert.equal(failed(parse(eof, [undefined])).found, "undefined");
+    assert.equal(failed(parse(eof, [10n])).found, "10");
+  });
+
+  test("formatTrace shows successful spans", () => {
+    const { events } = parseWithTrace((t) => t("d", digit), "1");
+    assert.equal(formatTrace(events), "✓ d 0..1");
+  });
+});
+
 describe("operators", () => {
   // A tiny grammar over single digits that builds strings, so the parse
   // tree shape is visible in the result.
