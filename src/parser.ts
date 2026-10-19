@@ -27,6 +27,8 @@ export type Parser<T> = (input: string, pos: number) => Result<T>;
 /** Failure from `parse`, with a human-friendly location. */
 export type ParseFailure = {
   readonly expected: readonly string[];
+  /** What was actually at `pos`: a quoted character, or "end of input". */
+  readonly found: string;
   readonly pos: number;
   readonly line: number;
   readonly column: number;
@@ -245,17 +247,22 @@ const locate = (input: string, pos: number): { line: number; column: number } =>
   return { line: lines.length, column: lines[lines.length - 1]!.length + 1 };
 };
 
+const describeAt = (input: string, pos: number): string => {
+  const cp = input.codePointAt(pos);
+  return cp === undefined ? "end of input" : JSON.stringify(String.fromCodePoint(cp));
+};
+
 /** Parse the whole input. Never throws; failures are returned as values. */
 export const parse = <T>(p: Parser<T>, input: string): ParseResult<T> => {
   const r = left(p, eof)(input, 0);
   if (r.ok) return { ok: true, value: r.value };
   const { pos, expected } = r.failure;
-  return { ok: false, error: { expected, pos, ...locate(input, pos) } };
+  return { ok: false, error: { expected, found: describeAt(input, pos), pos, ...locate(input, pos) } };
 };
 
 const orList = (xs: readonly string[]): string =>
   xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`;
 
 export const formatFailure = (e: ParseFailure): string =>
-  `Parse error at line ${e.line}, column ${e.column}: ` +
-  (e.expected.length ? `expected ${orList(e.expected)}` : "unexpected input");
+  `Parse error at line ${e.line}, column ${e.column}: unexpected ${e.found}` +
+  (e.expected.length ? `, expected ${orList(e.expected)}` : "");
