@@ -39,6 +39,7 @@ export type ParseFailure = {
   readonly column: number;
 };
 
+/** Outcome of `parse`: the value, or a located failure. */
 export type ParseResult<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly error: ParseFailure };
@@ -65,10 +66,13 @@ function merge(a: Failure | undefined, b: Failure | undefined): Failure | undefi
 
 // Primitives
 
+/** Consume nothing and return `value`. */
 export const succeed = <T>(value: T): Parser<T> => (_, pos) => success(value, pos);
 
+/** Consume nothing and fail, reporting `expected`. */
 export const fail = (expected: string): Parser<never> => (_, pos) => failure([expected], pos);
 
+/** Match the literal string `s`. */
 export const str = (s: string): Parser<string> => (input, pos) =>
   input.startsWith(s, pos) ? success(s, pos + s.length) : failure([JSON.stringify(s)], pos);
 
@@ -95,6 +99,7 @@ export const satisfy = (pred: (char: string) => boolean, name: string): Parser<s
   return pred(char) ? success(char, pos + char.length) : failure([name], pos);
 };
 
+/** Match any one code point. Fails only at end of input. */
 export const anyChar: Parser<string> = satisfy(() => true, "any character");
 
 /** Match one character from `chars`. */
@@ -109,6 +114,7 @@ export const noneOf = (chars: string): Parser<string> => {
   return satisfy((c) => !set.has(c), `none of ${JSON.stringify(chars)}`);
 };
 
+/** Match the end of input. */
 export const eof: Parser<null> = (input, pos) =>
   pos === input.length ? success(null, pos) : failure(["end of input"], pos);
 
@@ -126,6 +132,7 @@ export const withSpan = <T>(p: Parser<T>): Parser<Span<T>> => (input, start) => 
   return r.ok ? success({ value: r.value, start, end: r.pos }, r.pos, r.failure) : r;
 };
 
+/** Transform the value of `p` with `f`. */
 export const map = <A, B>(p: Parser<A>, f: (a: A) => B): Parser<B> => (input, pos) => {
   const r = p(input, pos);
   return r.ok ? success(f(r.value), r.pos, r.failure) : r;
@@ -139,12 +146,13 @@ export const chain = <A, B>(p: Parser<A>, f: (a: A) => Parser<B>): Parser<B> => 
   return q.ok ? success(q.value, q.pos, merge(r.failure, q.failure)) : failWith(q, merge(r.failure, q.failure));
 };
 
-type Values<Ps extends readonly Parser<any>[]> = {
+/** The tuple of values produced by `seq(...ps)`. */
+export type SeqValues<Ps extends readonly Parser<any>[]> = {
   [K in keyof Ps]: Ps[K] extends Parser<infer T> ? T : never;
 };
 
 /** Run parsers in order, collecting every value into a tuple. */
-export const seq = <Ps extends readonly Parser<any>[]>(...ps: Ps): Parser<Values<Ps>> => (input, start) => {
+export const seq = <Ps extends readonly Parser<any>[]>(...ps: Ps): Parser<SeqValues<Ps>> => (input, start) => {
   const values: unknown[] = [];
   let pos = start;
   let fail: Failure | undefined;
@@ -155,7 +163,7 @@ export const seq = <Ps extends readonly Parser<any>[]>(...ps: Ps): Parser<Values
     values.push(r.value);
     pos = r.pos;
   }
-  return success(values as unknown as Values<Ps>, pos, fail);
+  return success(values as unknown as SeqValues<Ps>, pos, fail);
 };
 
 // The combinators below are written directly rather than composed from
@@ -180,6 +188,7 @@ export const right = <B>(a: Parser<unknown>, b: Parser<B>): Parser<B> => (input,
   return success(rb.value, rb.pos, merge(ra.failure, rb.failure));
 };
 
+/** Run `open`, `p`, `close` in order, keeping the value of `p`. */
 export const between = <T>(open: Parser<unknown>, p: Parser<T>, close: Parser<unknown>): Parser<T> =>
   (input, pos) => {
     const ro = open(input, pos);
@@ -268,6 +277,7 @@ export const many = <T>(p: Parser<T>): Parser<readonly T[]> => (input, start) =>
   }
 };
 
+/** One or more repetitions of `p`. */
 export const many1 = <T>(p: Parser<T>): Parser<readonly T[]> => {
   const rest = many(p);
   return (input, pos) => {
@@ -323,7 +333,8 @@ export const count = <T>(n: number, p: Parser<T>): Parser<readonly T[]> => (inpu
   return success(values, pos, fail);
 };
 
-type Fields<S extends Readonly<Record<string, Parser<any>>>> = {
+/** The object produced by `struct(shape)`. */
+export type StructFields<S extends Readonly<Record<string, Parser<any>>>> = {
   readonly [K in keyof S]: S[K] extends Parser<infer T> ? T : never;
 };
 
@@ -331,7 +342,7 @@ type Fields<S extends Readonly<Record<string, Parser<any>>>> = {
  * Run each field's parser in key order, collecting the values into an object
  * with the same keys: `struct({ name: ident, _: symbol("="), value: expr })`.
  */
-export const struct = <S extends Readonly<Record<string, Parser<any>>>>(shape: S): Parser<Fields<S>> => {
+export const struct = <S extends Readonly<Record<string, Parser<any>>>>(shape: S): Parser<StructFields<S>> => {
   const fields = Object.entries(shape);
   return (input, start) => {
     const entries: [string, unknown][] = [];
@@ -344,7 +355,7 @@ export const struct = <S extends Readonly<Record<string, Parser<any>>>>(shape: S
       entries.push([key, r.value]);
       pos = r.pos;
     }
-    return success(Object.fromEntries(entries) as Fields<S>, pos, fail);
+    return success(Object.fromEntries(entries) as StructFields<S>, pos, fail);
   };
 };
 
@@ -384,8 +395,10 @@ const sepList = <T>(p: Parser<T>, sep: Parser<unknown>, allowEmpty: boolean, tra
     return s.ok ? success(s.values, s.pos, s.fail) : s;
   };
 
+/** One or more `p`, separated by `sep`. */
 export const sepBy1 = <T>(p: Parser<T>, sep: Parser<unknown>): Parser<readonly T[]> => sepList(p, sep, false, false);
 
+/** Zero or more `p`, separated by `sep`. A trailing `sep` is not consumed. */
 export const sepBy = <T>(p: Parser<T>, sep: Parser<unknown>): Parser<readonly T[]> => sepList(p, sep, true, false);
 
 /** Like `sepBy`, but allows a trailing separator after at least one item. */
@@ -455,6 +468,7 @@ export const parse = <T>(p: Parser<T>, input: string): ParseResult<T> => {
 const orList = (xs: readonly string[]): string =>
   xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`;
 
+/** Render a failure as `Parse error at line L, column C: unexpected X, expected A, B or C`. */
 export const formatFailure = (e: ParseFailure): string =>
   `Parse error at line ${e.line}, column ${e.column}: unexpected ${e.found}` +
   (e.expected.length ? `, expected ${orList(e.expected)}` : "");
