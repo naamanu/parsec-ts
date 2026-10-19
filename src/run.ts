@@ -1,4 +1,4 @@
-import type { Input, Parser } from "./core.ts";
+import type { Failure, Input, Parser } from "./core.ts";
 import { eof, left } from "./combinators.ts";
 import { describeToken } from "./tokens.ts";
 
@@ -53,14 +53,22 @@ const defaultDescribe = (input: Input, pos: number): string =>
 const defaultLocate = (input: Input, pos: number): { line: number; column: number } =>
   typeof input === "string" ? locateText(input, pos) : { line: 1, column: pos + 1 };
 
+/**
+ * Turn a raw `Failure` into a `ParseFailure` with what was found and its
+ * line and column. `parse` does this for you; use it directly for failures
+ * kept by `recover`.
+ */
+export const locateFailure = <I extends Input>(input: I, failure: Failure, options: ParseOptions<I> = {}): ParseFailure => {
+  const { pos, expected, context = [] } = failure;
+  const found = pos >= input.length ? "end of input" : (options.describe ?? defaultDescribe)(input, pos);
+  const { line, column } = (options.locate ?? defaultLocate)(input, pos);
+  return { expected, found, pos, line, column, context };
+};
+
 /** Parse the whole input. Never throws; failures are returned as values. */
 export const parse = <T, I extends Input>(p: Parser<T, I>, input: I, options: ParseOptions<I> = {}): ParseResult<T> => {
   const r = left(p, eof)(input, 0);
-  if (r.ok) return { ok: true, value: r.value };
-  const { pos, expected, context = [] } = r.failure;
-  const found = pos >= input.length ? "end of input" : (options.describe ?? defaultDescribe)(input, pos);
-  const { line, column } = (options.locate ?? defaultLocate)(input, pos);
-  return { ok: false, error: { expected, found, pos, line, column, context } };
+  return r.ok ? { ok: true, value: r.value } : { ok: false, error: locateFailure(input, r.failure, options) };
 };
 
 const orList = (xs: readonly string[]): string =>

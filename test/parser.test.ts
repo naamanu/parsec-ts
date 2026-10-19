@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   alt, anyChar, attempt, between, chain, chainl1, chainr1, cut, eof, fail, formatFailure, label, lazy, left, lookahead, many, many1,
   count, lexeme, manyTill, map, noneOf, not, oneOf, optional, parse, position, regex, right, satisfy, sepBy, sepBy1, sepEndBy, seq, str,
-  struct, succeed, symbol, whitespace, withSpan, anyToken, matchToken, satisfyToken, operators, context,
+  struct, succeed, symbol, whitespace, withSpan, anyToken, matchToken, satisfyToken, operators, context, recover, skipUntil, locateFailure,
   type Parser, type ParseResult,
 } from "../src/index.ts";
 import { calc } from "../examples/calc.ts";
@@ -282,6 +282,51 @@ describe("errors", () => {
   test("formatFailure reports line, column and alternatives", () => {
     const e = failed(parse(seq(str("a\n"), alt(str("b"), str("c"), str("d"))), "a\nx"));
     assert.equal(formatFailure(e), 'Parse error at line 2, column 1: unexpected "x", expected "b", "c" or "d"');
+  });
+});
+
+describe("recovery", () => {
+  const ident = lexeme(regex(/[a-z]+/, "identifier"));
+  const num = lexeme(map(regex(/\d+/, "number"), Number));
+  const stmt = map(right(symbol("let"), cut(seq(ident, symbol("="), num, symbol(";")))), ([name, , value]) => ({ name, value }));
+  const sync = left(skipUntil(str(";")), optional(symbol(";")));
+  const program = right(whitespace, many(recover(stmt, sync)));
+
+  test("keeps parsing after errors, returning error nodes", () => {
+    const src = "let x = 1;\nlet = 2;\nlet y 3;\nlet z = 4;";
+    const r = parse(program, src);
+    assert.ok(r.ok);
+    assert.deepEqual(r.value.map((n) => (n.ok ? n.value : n.skipped)), [
+      { name: "x", value: 1 },
+      { value: null, start: 11, end: 20 }, // the sync parser's symbol(";") also skips the newline
+      { value: null, start: 20, end: 29 },
+      { name: "z", value: 4 },
+    ]);
+    const errors = r.value.flatMap((n) => (n.ok ? [] : [formatFailure(locateFailure(src, n.failure))]));
+    assert.deepEqual(errors, [
+      'Parse error at line 2, column 5: unexpected "=", expected identifier',
+      'Parse error at line 3, column 7: unexpected "3", expected "="',
+    ]);
+  });
+
+  test("a failing sync parser makes recover fail", () => {
+    const strict = recover(stmt, right(skipUntil(str(";")), str(";")));
+    assert.equal(parse(strict, "let 1").ok, false);
+  });
+
+  test("recovered failures don't leak into later errors", () => {
+    // `stmt` fails at pos 4, but this sync consumes nothing, so parsing goes on
+    // from pos 0, where "!" fails. That's the error to report, not the
+    // already-recovered one further along.
+    const e = failed(parse(seq(recover(stmt, succeed(null)), str("!")), "let 1"));
+    assert.deepEqual([e.pos, e.expected], [0, ['"!"']]);
+  });
+
+  test("skipUntil steps by code point and stops at end of input", () => {
+    assert.deepEqual(parse(right(skipUntil(str("!")), str("!")), "😀a!"), ok("!"));
+    assert.deepEqual(parse(right(skipUntil(str("!")), eof), "😀a"), ok(null));
+    const skipTokens = right(skipUntil(matchToken(0)), anyToken<number>());
+    assert.deepEqual(parse(skipTokens, [3, 2, 0]), ok(0));
   });
 });
 
